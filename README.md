@@ -1,5 +1,5 @@
 # WAVO
-
+**A Project forked from [Zapfast](https://github.com/crmne/zapfast)**
 **WhatsApp, native and fast.** WAVO is a WhatsApp client written in Rust
 with [egui](https://github.com/emilk/egui). It uses
 [whatsapp-rust](https://github.com/oxidezap/whatsapp-rust) for the WhatsApp Web
@@ -12,7 +12,7 @@ built on [fastframe](https://github.com/crmne/fastframe)
 
 https://github.com/user-attachments/assets/2bf86b54-45fc-4add-8de7-c426c3cdad9b
 
-See **[wavo.rocks](https://wavo.rocks)** for downloads and guides.
+See **[zapfast.rocks](https://zapfast.rocks)** for downloads and guides.
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/screenshot-light.png">
