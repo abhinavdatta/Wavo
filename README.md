@@ -8,10 +8,7 @@ companion device, and has no browser engine. In our Linux test, it opens in
 under a second and uses about 200 MB of idle RAM, compared with 1.13 GB for
 WhatsApp Web and its Chromium processes. [See the measurements](https://wavo.rocks/benchmarks/).
 
-**Want Spotify just as fast and native?** [Spotifast](https://spotifast.rocks)
-is WAVO's sibling: the same native interface, for Spotify. Both are built
-on [fastframe](https://github.com/crmne/fastframe), the shared foundation for
-native Rust apps built with egui.
+built on [fastframe](https://github.com/crmne/fastframe)
 
 https://github.com/user-attachments/assets/2bf86b54-45fc-4add-8de7-c426c3cdad9b
 
