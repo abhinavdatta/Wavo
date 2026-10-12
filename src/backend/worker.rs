@@ -2999,6 +2999,9 @@ impl Worker {
     fn ingest(&mut self, message: &Arc<wa::Message>, info: &MessageInfo) {
         self.learn_source(&info.source);
         if info.source.chat.is_status_broadcast() {
+            // Status updates are archived in their round-up chat for the
+            // Status page and never notify, bump unread, or send receipts.
+            self.ingest_status(message, info);
             return;
         }
         let chat = self.canonical(&info.source.chat);
@@ -3184,6 +3187,51 @@ impl Worker {
         if is_poll {
             self.pump_poll_votes();
         }
+    }
+
+    /// Archives one `status@broadcast` message for the Status page. The chat
+    /// keeps a fixed name, its messages never bump unread or notify, and no
+    /// receipts are sent: statuses expire on the phone after 24 hours.
+    fn ingest_status(&mut self, message: &Arc<wa::Message>, info: &MessageInfo) {
+        if self.predates_removal(
+            crate::model::STATUS_BROADCAST_ID,
+            info.timestamp.timestamp(),
+        ) {
+            return;
+        }
+        let base = message.get_base_message();
+        let Some(content) = classify(message) else {
+            return;
+        };
+        let from_me = info.source.is_from_me;
+        let sender = if from_me {
+            self.me()
+        } else {
+            self.canonical(&info.source.sender)
+        };
+        let row = Message {
+            id: info.id.to_string(),
+            chat: crate::model::STATUS_BROADCAST_ID.to_owned(),
+            sender,
+            sender_name: (!info.push_name.is_empty() && !from_me)
+                .then(|| info.push_name.to_string()),
+            from_me,
+            timestamp: info.timestamp.timestamp(),
+            content,
+            status: Delivery::None,
+            delivered_at: None,
+            read_at: None,
+            quoted: None,
+            reactions: Vec::new(),
+            edited: false,
+            mentions: Vec::new(),
+            forwarded: forwarded_of(base),
+            thumbnail: thumbnail_of(base),
+        };
+        let _ = self
+            .archive
+            .ensure_chat(crate::model::STATUS_BROADCAST_ID, "Status");
+        self.archive_message(row, Some(message.encode_to_vec()), None, false);
     }
 
     /// Applies a live location position to the share it belongs to, so a
@@ -3654,6 +3702,12 @@ impl Worker {
                 // A new live message may share the read message's second. Its
                 // distinct id already passed the duplicate check above.
                 .is_none_or(|through| message.timestamp >= through);
+        // The status round-up never counts: its updates live on the Status page.
+        let unread = if chat == crate::model::STATUS_BROADCAST_ID {
+            false
+        } else {
+            unread
+        };
         if unread {
             let _ = self.archive.bump_unread(&chat);
         } else if message.from_me

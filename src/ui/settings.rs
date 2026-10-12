@@ -1,10 +1,14 @@
 //! The settings page.
+//!
+//! This module provides the settings UI for the application, including
+//! account management, profile customization, and application preferences.
 
 use std::borrow::Cow;
 
 use egui::{Align, CornerRadius, Frame, Layout, Margin, Rect, Stroke, Vec2, pos2, vec2};
 
 use crate::app::App;
+use crate::app_lock::FormMode;
 use crate::i18n::Locale;
 use crate::model::{Action, Dialog, Page};
 use crate::privacy::{PrivacyChoice, PrivacyKind};
@@ -664,7 +668,7 @@ fn sections(app: &App) -> Vec<Section> {
         },
     );
 
-    let mut account_section = Section::new(translated(locale, "Account"));
+    let mut account_section = Section::new(translated(locale, "Account → Change profile"));
     account_section.block(
         vec![
             translated(locale, "Your name"),
@@ -673,12 +677,118 @@ fn sections(app: &App) -> Vec<Section> {
                 source: "About".into(),
             },
             translated(locale, "Change profile picture"),
+            translated(locale, "Change profile"),
             translated(locale, "Profile password"),
+            Text {
+                shown: "".into(),
+                source: "".into(),
+            },
             translated(locale, "Unlink this computer"),
             translated(locale, "Add account"),
             translated(locale, "Remove this account"),
         ],
         |ui, app| account(app, ui),
+    );
+
+    let mut change_profile = Section::new(translated(locale, "Profile"));
+    change_profile.block(
+        vec![
+            translated(locale, "Change profile picture"),
+            translated(locale, "Change profile"),
+            translated(locale, "Profile password"),
+        ],
+        move |ui, app| {
+            ui.horizontal(|ui| {
+                ui.set_width(ui.available_width());
+                ui.vertical(|ui| {
+                    ui.set_width((ui.available_width() - 12.0).max(200.0));
+                    ui.horizontal(|ui| {
+                        ui.set_width(ui.available_width());
+                        if theme::soft_button(
+                            ui,
+                            &palette,
+                            Some(Icon::Pencil),
+                            &crate::i18n::gettext(app.locale, "Change profile"),
+                            true,
+                        )
+                        .clicked()
+                        {
+                            app.actions.push(Action::SetProfile {
+                                name: app.me_name.clone(),
+                                about: app.me_about.clone(),
+                            });
+                        }
+                        ui.add_space(8.0);
+                        if theme::soft_button(
+                            ui,
+                            &palette,
+                            Some(Icon::Image),
+                            &crate::i18n::gettext(app.locale, "Change profile picture"),
+                            true,
+                        )
+                        .clicked()
+                        {
+                            app.actions.push(Action::PickProfilePicture);
+                        }
+                    });
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        ui.set_width(ui.available_width());
+                        if theme::soft_button(
+                            ui,
+                            &palette,
+                            Some(Icon::Lock),
+                            &crate::i18n::gettext(app.locale, "Profile password"),
+                            true,
+                        )
+                        .clicked()
+                        {
+                            app.actions
+                                .push(Action::ProfilePinForm(Some(FormMode::Change)));
+                        }
+                        ui.add_space(8.0);
+                        if theme::soft_button(
+                            ui,
+                            &palette,
+                            Some(Icon::LogOut),
+                            &crate::i18n::gettext(app.locale, "Unlink this computer"),
+                            true,
+                        )
+                        .clicked()
+                        {
+                            app.actions.push(Action::ShowDialog(Dialog::ConfirmUnlink));
+                        }
+                    });
+                    ui.add_space(8.0);
+                    if theme::soft_button(
+                        ui,
+                        &palette,
+                        Some(Icon::Plus),
+                        &crate::i18n::gettext(app.locale, "Add account"),
+                        false,
+                    )
+                    .clicked()
+                    {
+                        app.actions.push(Action::AddAccount);
+                    }
+                    ui.add_space(8.0);
+                    if theme::soft_button(
+                        ui,
+                        &palette,
+                        Some(Icon::Trash),
+                        &crate::i18n::gettext(app.locale, "Remove this account"),
+                        false,
+                    )
+                    .clicked()
+                    {
+                        app.actions
+                            .push(Action::ShowDialog(Dialog::ConfirmRemoveAccount(
+                                app.account().id.clone(),
+                            )));
+                    }
+                });
+            });
+        },
     );
 
     let mut files = Section::new(translated(locale, "Files"));
@@ -774,6 +884,7 @@ fn sections(app: &App) -> Vec<Section> {
         privacy,
         system,
         account_section,
+        change_profile,
         files,
         about_section,
     ]
@@ -1437,6 +1548,18 @@ fn account(app: &mut App, ui: &mut egui::Ui) {
             }
         });
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            // Profile change button - allows editing the current profile
+            if theme::soft_button(
+                ui,
+                &palette,
+                Some(Icon::Pencil),
+                &crate::i18n::gettext(app.locale, "Change profile"),
+                false,
+            )
+            .clicked()
+            {
+                draft = Some((name.clone(), app.me_about.clone().unwrap_or_default()));
+            }
             // With other numbers here, unlinking this one also takes it off
             // the switcher; the last one stays, waiting to be linked again.
             if app.has_several_accounts() {
@@ -1544,6 +1667,7 @@ fn profile_pin_rows(app: &mut App, ui: &mut egui::Ui) {
         };
         let mode = form.mode;
         let busy = form.busy;
+
         ui.add_space(4.0);
         let count = MIN_PASSWORD_CHARS.to_string();
         let mut fields: Vec<(&mut String, String, &'static str)> = Vec::new();
@@ -1620,7 +1744,7 @@ fn profile_pin_rows(app: &mut App, ui: &mut egui::Ui) {
                 app.actions.push(Action::ProfilePinForm(None));
             }
         });
-        ui.add_space(10.0);
+        ui.add_space(10.0); // END FORM
         return;
     }
     ui.add_space(6.0);
@@ -2028,13 +2152,13 @@ mod tests {
 
     #[test]
     fn blocks_are_found_by_their_keywords() {
-        let mut account = Section::new(translated(Locale::English, "Account"));
+        let mut account = Section::new(translated(Locale::English, "Account → Change profile"));
         account.block(
             vec![translated(Locale::English, "Unlink this computer")],
             |_, _| {},
         );
         assert_eq!(account.visible(&Filter::new("unlink")).1.len(), 1);
-        let mut account = Section::new(translated(Locale::English, "Account"));
+        let mut account = Section::new(translated(Locale::English, "Account → Change profile"));
         account.block(Vec::new(), |_, _| {});
         assert!(account.visible(&Filter::new("unlink")).1.is_empty());
     }

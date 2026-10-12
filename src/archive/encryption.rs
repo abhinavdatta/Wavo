@@ -1,6 +1,10 @@
 //! SQLCipher archive storage and automatic OS-keyring unlock.
 
-use std::{fs, io::Read, path::Path};
+use std::{
+    fs,
+    io::Read,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result, ensure};
 use keyring_core::api::CredentialStoreApi;
@@ -10,13 +14,21 @@ use zeroize::Zeroizing;
 
 const HEADER: &[u8; 16] = b"SQLite format 3\0";
 
+/// The keyring service the archive key lives in.
+const SERVICE: &str = "rocks.wavo.WAVO";
+
+/// Keyring services the fork's earlier names used for the same archive key.
+/// A key written there is filed under the identity of the folder the archive
+/// lived in at the time, which renames between app versions have left behind.
+const LEGACY_SERVICES: [&str; 1] = ["rocks.zapfast.ZapFast"];
+
 fn plaintext(path: &Path) -> Result<bool> {
     let mut file = match fs::File::open(path) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(true),
         Err(error) => return Err(error.into()),
     };
-    if file.metadata()?.len() == 0 {
+    if file.metadata()?.len() < HEADER.len() as u64 {
         return Ok(true);
     }
     let mut header = [0; 16];
@@ -29,10 +41,96 @@ pub(super) fn key_for(path: &Path) -> Result<Zeroizing<[u8; 32]>> {
     fs::create_dir_all(parent)?;
     let store = platform_store()?;
     let entry = store
-        .build("rocks.wavo.WAVO", &identity_for(parent)?, None)
+        .build(SERVICE, &identity_for(parent)?, None)
         .map_err(keyring_error)
         .context("The OS keyring could not open WAVO's archive key")?;
     key_from_entry(path, &entry)
+}
+
+/// Copies the archive key into `new_state`'s identity when the encrypted
+/// archive in `old_state` can only be found under an earlier keyring
+/// service, before the archive moves into the new directory tree.
+///
+/// Renames between app versions can leave a key filed under the identity of
+/// a folder that no longer exists: `legacy_parents` holds the historical
+/// folders to ask for. The key itself is never read into a log; only whether
+/// a usable 32-byte one was found.
+pub fn migrate_legacy_key(
+    old_state: &Path,
+    new_state: &Path,
+    legacy_parents: &[PathBuf],
+) -> Result<()> {
+    migrate_legacy_key_in(old_state, new_state, legacy_parents, &*platform_store()?)
+}
+
+fn migrate_legacy_key_in(
+    old_state: &Path,
+    new_state: &Path,
+    legacy_parents: &[PathBuf],
+    store: &dyn CredentialStoreApi,
+) -> Result<()> {
+    if plaintext(&old_state.join("archive.db"))? {
+        return Ok(());
+    }
+    let new_entry = store
+        .build(SERVICE, &identity_for(new_state)?, None)
+        .map_err(keyring_error)
+        .context("The OS keyring could not open WAVO's archive key")?;
+    match new_entry.get_secret() {
+        // Already migrated, or this state's archive has its own key.
+        Ok(secret) if secret.len() == 32 => return Ok(()),
+        Ok(_) => {}
+        Err(keyring_core::Error::NoEntry) => {}
+        Err(error) => {
+            return Err(keyring_error(error)).context("Unlock your OS keyring and restart WAVO");
+        }
+    }
+    for parent in legacy_parents {
+        for service in std::iter::once(SERVICE).chain(LEGACY_SERVICES) {
+            let entry = match store.build(service, &identity_for(parent)?, None) {
+                Ok(entry) => entry,
+                Err(error) => {
+                    return Err(keyring_error(error))
+                        .context("Unlock your OS keyring and restart WAVO");
+                }
+            };
+            let secret = match entry.get_secret() {
+                Ok(secret) => secret,
+                Err(keyring_core::Error::NoEntry) => continue,
+                Err(error) => {
+                    return Err(keyring_error(error))
+                        .context("Unlock your OS keyring and restart WAVO");
+                }
+            };
+            if secret.len() != 32 {
+                continue;
+            }
+            let mut key = Zeroizing::new([0u8; 32]);
+            key.copy_from_slice(&secret);
+            // An earlier setup's key must not be adopted for this archive:
+            // only one that actually opens it moves forward.
+            if open(&old_state.join("archive.db"), &key).is_err() {
+                continue;
+            }
+            new_entry
+                .set_secret(&secret)
+                .map_err(keyring_error)
+                .context("Could not save the archive key in the OS keyring")?;
+            let saved = new_entry
+                .get_secret()
+                .map_err(keyring_error)
+                .context("Could not verify the moved archive key")?;
+            ensure!(
+                saved == secret,
+                "The OS keyring did not retain the archive key"
+            );
+            return Ok(());
+        }
+    }
+    // Nothing found under the legacy services. If the archive is encrypted
+    // and its key is genuinely gone, moving it reports that through the
+    // ordinary copy.
+    Ok(())
 }
 
 /// Copies the keyring entry when an archive moves to another folder.
@@ -62,7 +160,7 @@ fn copy_archive_key_in(
         return Ok(());
     }
     let old_entry = store
-        .build("rocks.wavo.WAVO", &identity_for(old_parent)?, None)
+        .build(SERVICE, &identity_for(old_parent)?, None)
         .map_err(keyring_error)
         .context("The OS keyring could not open WAVO's archive key")?;
     let key = match old_entry.get_secret() {
@@ -87,7 +185,7 @@ fn copy_archive_key_in(
         }
     };
     let new_entry = store
-        .build("rocks.wavo.WAVO", &identity_for(new_parent)?, None)
+        .build(SERVICE, &identity_for(new_parent)?, None)
         .map_err(keyring_error)
         .context("The OS keyring could not open WAVO's archive key")?;
     new_entry
@@ -112,7 +210,7 @@ fn copy_archive_key_in(
 /// such as a removed account's. Never call it while the archive exists.
 pub fn forget_archive_key(identity: &str) -> Result<()> {
     let entry = platform_store()?
-        .build("rocks.wavo.WAVO", identity, None)
+        .build(SERVICE, identity, None)
         .map_err(keyring_error)?;
     match entry.delete_credential() {
         Ok(()) | Err(keyring_core::Error::NoEntry) => Ok(()),
@@ -128,7 +226,25 @@ pub fn archive_key_identity(path: &Path) -> Result<String> {
 fn identity_for(parent: &Path) -> Result<String> {
     // Separate profiles must not overwrite each other's keys. The credential
     // label contains a digest, never a user path, phone number or message data.
-    let digest = Sha256::digest(parent.canonicalize()?.as_os_str().as_encoded_bytes());
+    // The folder may not exist yet, so canonicalize the deepest existing
+    // ancestor and append the rest; the result matches what canonicalize will
+    // return once the folder exists.
+    let mut missing = Vec::new();
+    let mut known = parent.to_path_buf();
+    while !known.exists() {
+        match known.parent() {
+            Some(rest) => {
+                missing.push(known.file_name().map(|name| name.to_os_string()));
+                known = rest.to_path_buf();
+            }
+            None => break,
+        }
+    }
+    let mut canonical = known.canonicalize()?;
+    for part in missing.into_iter().rev().flatten() {
+        canonical.push(part);
+    }
+    let digest = Sha256::digest(canonical.as_os_str().as_encoded_bytes());
     Ok(format!(
         "archive-{}",
         digest
@@ -582,5 +698,89 @@ mod tests {
         assert_eq!(read_secret(&Connection::open(&path).unwrap()), "keep me");
         fs::remove_dir(path.with_extension("db.encrypting")).unwrap();
         assert_eq!(read_secret(&open(&path, &[9; 32]).unwrap()), "keep me");
+    }
+
+    #[test]
+    fn a_key_filed_under_an_earlier_name_moves_to_the_new_identity() {
+        for service in [SERVICE, "rocks.zapfast.ZapFast"] {
+            let directory = directory();
+            let old_state = directory.path().join("previous-name-data");
+            fs::create_dir_all(&old_state).unwrap();
+            let archive = old_state.join("archive.db");
+            let connection = open(&archive, &[7; 32]).unwrap();
+            connection
+                .execute_batch(
+                    "CREATE TABLE example(value TEXT); INSERT INTO example VALUES ('fixture');",
+                )
+                .unwrap();
+            drop(connection);
+            assert!(!plaintext(&archive).unwrap());
+
+            // The key is filed under the identity of the folder the archive
+            // lived in before the rename, under that era's service (or under
+            // the current service with the old folder's identity).
+            let store = keyring_core::mock::Store::new().unwrap();
+            let legacy = store
+                .build(service, &identity_for(&old_state).unwrap(), None)
+                .unwrap();
+            legacy.set_secret(&[7; 32]).unwrap();
+
+            let new_state = directory.path().join("wavo-data");
+            migrate_legacy_key_in(
+                &old_state,
+                &new_state,
+                std::slice::from_ref(&old_state),
+                &*store,
+            )
+            .unwrap();
+            let moved = store
+                .build(SERVICE, &identity_for(&new_state).unwrap(), None)
+                .unwrap();
+            assert_eq!(moved.get_secret().unwrap(), [7; 32]);
+            // The archive still opens with the key it was born with.
+            assert!(open(&archive, &[7; 32]).is_ok());
+        }
+    }
+
+    #[test]
+    fn a_key_for_a_different_archive_is_not_adopted() {
+        let directory = directory();
+        let old_state = directory.path().join("previous-name-data");
+        fs::create_dir_all(&old_state).unwrap();
+        let archive = old_state.join("archive.db");
+        let connection = open(&archive, &[7; 32]).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE example(value TEXT); INSERT INTO example VALUES ('fixture');",
+            )
+            .unwrap();
+        drop(connection);
+        let store = keyring_core::mock::Store::new().unwrap();
+        let legacy = store
+            .build(
+                "rocks.zapfast.ZapFast",
+                &identity_for(&old_state).unwrap(),
+                None,
+            )
+            .unwrap();
+        // The key of some other profile's archive.
+        legacy.set_secret(&[8; 32]).unwrap();
+
+        let new_state = directory.path().join("wavo-data");
+        migrate_legacy_key_in(
+            &old_state,
+            &new_state,
+            std::slice::from_ref(&old_state),
+            &*store,
+        )
+        .unwrap();
+        let adopted = store
+            .build(SERVICE, &identity_for(&new_state).unwrap(), None)
+            .unwrap();
+        assert!(matches!(
+            adopted.get_secret(),
+            Err(keyring_core::Error::NoEntry)
+        ));
+        assert!(open(&archive, &[7; 32]).is_ok());
     }
 }

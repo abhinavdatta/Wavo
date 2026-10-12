@@ -625,6 +625,10 @@ pub struct App {
     /// else, asking each pinned profile for its password before its chats
     /// show. `None` while the gate is not up.
     pub profile_gate: Option<ProfileGate>,
+    /// Profiles already opened this session behind a password. A pinned one
+    /// is left asking unless it is here: switching back to an unlocked
+    /// profile does not re-ask.
+    opened_profiles: std::collections::HashSet<AccountId>,
 }
 
 /// The profile gate's state: which profile is being asked for its password,
@@ -1186,6 +1190,7 @@ impl App {
             badge: None,
             app_lock,
             profile_gate: None,
+            opened_profiles: std::collections::HashSet::new(),
             profile_pin_form: None,
             profile_pin_job: None,
         };
@@ -1294,6 +1299,22 @@ impl App {
         self.adding_account = false;
         if let Some(abandoned) = abandoned {
             self.remove_account(abandoned);
+        }
+        // A profile closed behind the wall: a pinned one not yet opened this
+        // session asks for its password before its chats show, whoever asks
+        // to enter it (the avatar switcher, the wall's Add profile, a clicked
+        // notification).
+        if Self::pin_of(self, id).is_some()
+            && !self.opened_profiles.contains(id)
+            && self.profile_gate.is_none()
+        {
+            self.show_profile_gate();
+            if let Some(gate) = &mut self.profile_gate {
+                gate.asking = Some(id.clone());
+            }
+            self.save_roster();
+            self.report_presence();
+            return;
         }
         self.restore_composer();
         self.page = Page::Chats;
@@ -2255,6 +2276,8 @@ impl App {
         let mut chats: Vec<&Chat> = self
             .chats
             .iter()
+            // The status round-up lives on the Status page, not in the chats.
+            .filter(|chat| !(!locked && chat.is_status()))
             .filter(|chat| chat.locked == locked)
             .filter(|chat| locked || chat.archived == self.show_archived || !needle.is_empty())
             .filter(|chat| match &self.label_filter {
@@ -4167,6 +4190,10 @@ impl App {
                 if page != Page::Settings && !self.app_lock.checking() {
                     self.app_lock.form = None;
                 }
+                // The Status page reads the archive's status round-up chat.
+                if page == Page::Status {
+                    self.ensure_loaded(crate::model::STATUS_BROADCAST_ID);
+                }
                 self.page = page;
                 self.dialog = None;
                 self.emoji_start = None;
@@ -5948,16 +5975,20 @@ impl App {
         if let Some(outcome) = self.app_lock.poll() {
             self.app_lock_outcome(outcome);
         }
-        // A finished profile-password check.
+        // A finished profile-password check. The receiver stays in `job`
+        // until its answer arrives: taking it first would drop the only
+        // copy during the check's 60 ms and leave the ask spinning forever.
         if let Some(gate) = &mut self.profile_gate {
-            let done = gate.job.take();
-            if let Some(receiver) = done
+            let mut opened = false;
+            if let Some(receiver) = &gate.job
                 && let Ok(ok) = receiver.try_recv()
             {
+                gate.job = None;
                 gate.verify(ok);
-                if ok && let Some(id) = gate.asking.clone() {
-                    self.open_profile(&id);
-                }
+                opened = ok;
+            }
+            if opened && let Some(id) = gate.asking.clone() {
+                self.open_profile(&id);
             }
         }
         // A finished Settings PIN form check.
@@ -6180,6 +6211,7 @@ impl App {
     /// Switches the window to a profile that is not held at the wall.
     fn open_profile(&mut self, id: &AccountId) {
         self.switch_account(id);
+        self.opened_profiles.insert(id.clone());
         self.profile_gate = None;
     }
 
@@ -7098,6 +7130,79 @@ mod tests {
         let roster = AccountRoster::load(&app.dirs.accounts_file()).unwrap();
         assert_eq!(roster.order, ["1".to_string(), "2".to_string()]);
         assert_eq!(roster.active, "1");
+    }
+
+    /// Adding a profile from the wall must not let any profile down: the
+    /// abandoned link keeps the wall up, and the pinned profile still asks
+    /// for its password.
+    #[test]
+    fn adding_a_profile_keeps_the_wall_up_and_the_pinned_one_asking() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut app = App::headless(AppDirs::under(directory.path()), Settings::default()).0;
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let (second, _events) = Account::detached(
+            &app.dirs,
+            AccountId::parse("2").unwrap(),
+            crate::settings::AccountSettings::default(),
+        )
+        .unwrap();
+        app.accounts.push(second);
+        let first = AccountId::first();
+        app.accounts
+            .iter_mut()
+            .find(|account| account.id == first)
+            .unwrap()
+            .settings
+            .profile_pin_hash = Some(crate::app_lock::verifier("1234"));
+        app.profile_gate = Some(ProfileGate::default());
+
+        app.apply(Action::AddAccount, &ctx);
+        assert!(app.adding_account);
+        assert_eq!(app.account().id.as_str(), "2");
+        assert!(
+            app.profile_gate.is_some(),
+            "adding a profile from the wall drops the wall"
+        );
+
+        app.apply(Action::PickProfile(first.clone()), &ctx);
+        let gate = app.profile_gate.as_ref().expect("the wall is still up");
+        assert_eq!(
+            gate.asking.as_ref(),
+            Some(&first),
+            "picking the pinned profile asks for its password"
+        );
+
+        // A wrong password keeps the profile locked; the right one opens it.
+        if let Some(gate) = &mut app.profile_gate {
+            gate.entry = "0000".into();
+        }
+        app.apply(Action::SubmitProfilePassword, &ctx);
+        let mut opened = false;
+        for _ in 0..100 {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            app.background_frame(&ctx);
+            if app.profile_gate.is_none() {
+                opened = true;
+                break;
+            }
+        }
+        assert!(!opened, "a wrong password must not open the profile");
+        if let Some(gate) = &mut app.profile_gate {
+            gate.entry = "1234".into();
+        }
+        app.apply(Action::SubmitProfilePassword, &ctx);
+        let mut opened = false;
+        for _ in 0..100 {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            app.background_frame(&ctx);
+            if app.profile_gate.is_none() {
+                opened = true;
+                break;
+            }
+        }
+        assert!(opened, "a correct password opens the profile at once");
+        assert_eq!(app.account().id, first);
     }
 
     /// Two accounts, the second with a recording backend; the first on screen.

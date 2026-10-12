@@ -124,10 +124,11 @@ impl ChatFilter {
 
     pub fn matches(self, chat: &Chat) -> bool {
         match self {
-            Self::All => !chat.is_channel(),
-            Self::Unread => chat.looks_unread() && !chat.is_channel(),
-            Self::Private => chat.kind == ChatKind::Direct,
-            Self::Favorites => chat.favorite && !chat.is_channel(),
+            // The status round-up lives on the Status page, never in the chats.
+            Self::All => !chat.is_channel() && !chat.is_status(),
+            Self::Unread => chat.looks_unread() && !chat.is_channel() && !chat.is_status(),
+            Self::Private => chat.kind == ChatKind::Direct && !chat.is_status(),
+            Self::Favorites => chat.favorite && !chat.is_channel() && !chat.is_status(),
             Self::Groups => chat.kind == ChatKind::Group,
             Self::Channels => chat.is_channel(),
         }

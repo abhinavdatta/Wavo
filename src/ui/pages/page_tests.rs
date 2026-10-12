@@ -29,7 +29,7 @@ fn story_message(author: &str, id: &str, timestamp: i64) -> Message {
         sender: author.into(),
         sender_name: Some("Author".into()),
         from_me: false,
-        timestamp,
+        timestamp: crate::util::now() - timestamp * 60,
         content: Content::text("status update"),
         status: Delivery::None,
         delivered_at: None,

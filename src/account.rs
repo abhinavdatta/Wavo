@@ -207,7 +207,11 @@ impl Account {
             .chats
             .iter()
             .filter(|chat| {
-                !chat.archived && !chat.locked && !chat.muted(now) && chat.looks_unread()
+                !chat.archived
+                    && !chat.locked
+                    && !chat.muted(now)
+                    && chat.looks_unread()
+                    && !chat.is_status()
             })
             .count();
         u32::try_from(chats).unwrap_or(u32::MAX)
@@ -298,12 +302,17 @@ impl Account {
     }
 
     /// One story per author with updates in the status round-up chat.
-    /// Includes own posted statuses, newest story first.
+    /// Includes own posted statuses, newest story first. Older than 24 hours
+    /// are gone on the phone too, so they no longer show here.
     pub fn status_entries(&self) -> Vec<StatusEntry> {
+        let fresh_after = crate::util::now() - 24 * 60 * 60;
         let mut order: Vec<String> = Vec::new();
         let mut entries: HashMap<String, StatusEntry> = HashMap::new();
         if let Some(conversation) = self.conversations.get(crate::model::STATUS_BROADCAST_ID) {
             for message in &conversation.messages {
+                if message.timestamp <= fresh_after {
+                    continue;
+                }
                 let author = if message.from_me {
                     match self.me.as_deref() {
                         Some(me) => me.to_owned(),
@@ -367,7 +376,9 @@ impl Account {
     }
 
     /// One author's status updates, oldest first, for the story viewer.
+    /// Only the last 24 hours, like `status_entries`.
     pub fn status_messages(&self, author: &str) -> Vec<&Message> {
+        let fresh_after = crate::util::now() - 24 * 60 * 60;
         self.conversations
             .get(crate::model::STATUS_BROADCAST_ID)
             .map(|conversation| {
@@ -375,11 +386,12 @@ impl Account {
                     .messages
                     .iter()
                     .filter(|message| {
-                        if message.from_me {
-                            self.me.as_deref() == Some(author)
-                        } else {
-                            message.sender == author
-                        }
+                        message.timestamp > fresh_after
+                            && if message.from_me {
+                                self.me.as_deref() == Some(author)
+                            } else {
+                                message.sender == author
+                            }
                     })
                     .collect()
             })

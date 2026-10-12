@@ -26,17 +26,22 @@ the phone. Clearing the media cache makes WAVO download attachments again.
 Expired attachments may still be available through the phone.
 
 On macOS, settings, state, and the logs are in
-`~/Library/Application Support/me.paolino.wavo` and the caches in
-`~/Library/Caches/me.paolino.wavo`. On Windows, settings are in
-`%APPDATA%\paolino\wavo\config`, state and the logs in
-`%LOCALAPPDATA%\paolino\wavo\data`, and the caches in
-`%LOCALAPPDATA%\paolino\wavo\cache`.
+`~/Library/Application Support/wavo` and the caches in
+`~/Library/Caches/wavo`. On Windows, settings are in
+`%APPDATA%\wavo\config`, state and the logs in
+`%LOCALAPPDATA%\wavo\data`, and the caches in
+`%LOCALAPPDATA%\wavo\cache`.
 
-On first start, WAVO moves the corresponding `fastsapp` directories (or
-`fastwhatsapp` from earlier versions), including the session, archive, saved
-stickers, and window state. Existing WAVO directories are never overwritten.
-Quit FastsApp first; launching WAVO while it is running brings the existing
-window forward.
+On first start, WAVO moves the folders of its earlier names (`fastsapp`,
+`fastwhatsapp`, `zapfast`, and the `paolino`-prefixed variants, including
+`me.paolino.wavo`), keeping the session, archive, saved stickers, and window
+state. Existing WAVO directories are never overwritten. The archive's
+encryption key moves with it: if the key lives under one of the earlier
+keyring names, WAVO verifies it against the encrypted archive before adopting
+it, so an encrypted archive keeps working after the move. If neither the
+folder move nor the key can be carried over, nothing is changed and WAVO
+explains what to do. Quit FastsApp first; launching WAVO while it is running
+brings the existing window forward.
 
 ## Settings
 

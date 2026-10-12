@@ -9,6 +9,22 @@ use directories::ProjectDirs;
 
 use crate::model::AccountId;
 
+/// Earlier names and organisations of this app, newest first, whose folders
+/// and keyring identities are adopted at startup.
+const PREVIOUS_NAMES: [(&str, &str, &str); 11] = [
+    ("me", "paolino", "wavo"),
+    ("", "paolino", "wavo"),
+    ("me", "paolino", "zapfast"),
+    ("", "paolino", "zapfast"),
+    ("me", "paolino", "fastsapp"),
+    ("", "paolino", "fastsapp"),
+    ("me", "paolino", "fastwhatsapp"),
+    ("", "paolino", "fastwhatsapp"),
+    ("", "", "zapfast"),
+    ("", "", "fastsapp"),
+    ("", "", "fastwhatsapp"),
+];
+
 #[derive(Clone, Debug)]
 pub struct AppDirs {
     pub config: PathBuf,
@@ -36,7 +52,12 @@ impl AppDirs {
 
     /// Standard platform directories for the app.
     fn of(name: &str) -> Option<Self> {
-        let project = ProjectDirs::from("me", "paolino", name)?;
+        Self::of_org("", "", name)
+    }
+
+    /// Standard platform directories for an earlier name of the app.
+    fn of_org(qualifier: &str, organization: &str, name: &str) -> Option<Self> {
+        let project = ProjectDirs::from(qualifier, organization, name)?;
         let state = project
             .state_dir()
             .map(|path| path.to_path_buf())
@@ -50,12 +71,13 @@ impl AppDirs {
     }
 
     /// Adopts earlier names, newest first, without replacing existing data:
-    /// The fork's own previous folder, then ZapFast's and FastsApp's, so a
-    /// linked device survives the rename. Call only after acquiring the
-    /// instance guard, and never for demo runs.
+    /// the rebrand's first organisation, then the fork's own previous folder,
+    /// then ZapFast's and FastsApp's, so a linked device survives the rename.
+    /// Each name is tried with the fork's earlier qualifier too. Call only
+    /// after acquiring the instance guard, and never for demo runs.
     pub fn adopt_previous_names(&self) -> std::io::Result<()> {
-        for name in ["zapfast", "fastsapp", "fastwhatsapp"] {
-            if let Some(old) = Self::of(name) {
+        for (qualifier, organization, name) in PREVIOUS_NAMES {
+            if let Some(old) = Self::of_org(qualifier, organization, name) {
                 self.adopt(&old)?;
             }
             if let (Some(from), Some(to)) = (eframe::storage_dir(name), eframe::storage_dir("wavo"))
@@ -67,6 +89,14 @@ impl AppDirs {
     }
 
     fn adopt(&self, old: &Self) -> std::io::Result<()> {
+        // The archive key may live under the fork's earlier keyring service,
+        // filed under the identity of a folder that renames have left behind.
+        // It moves into the new service and the new tree before the folders
+        // do, because the keyring cannot be asked about a folder that no
+        // longer exists.
+        if old.state.join("archive.db").exists() {
+            self.adopt_archive_key(old)?;
+        }
         for (from, to) in [
             (&old.config, &self.config),
             (&old.state, &self.state),
@@ -75,6 +105,25 @@ impl AppDirs {
             adopt_directory(from, to)?;
         }
         Ok(())
+    }
+
+    fn adopt_archive_key(&self, old: &Self) -> std::io::Result<()> {
+        let mut legacy_parents = Vec::new();
+        // The key was filed under the folder the archive lived in at the
+        // time: every earlier name's state folder, and the account folder
+        // inside it, are all worth asking.
+        for (qualifier, organization, name) in PREVIOUS_NAMES {
+            if let Some(dirs) = Self::of_org(qualifier, organization, name) {
+                legacy_parents.push(dirs.state.clone());
+                legacy_parents.push(
+                    dirs.state
+                        .join("accounts")
+                        .join(AccountId::first().as_str()),
+                );
+            }
+        }
+        crate::archive::migrate_legacy_key(&old.state, &self.state, &legacy_parents)
+            .map_err(|error| std::io::Error::other(format!("{error:#}")))
     }
 
     /// Places all data under one directory for tests and temporary runs.

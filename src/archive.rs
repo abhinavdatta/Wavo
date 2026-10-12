@@ -7,11 +7,15 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OptionalExtension, params};
 
-use crate::model::{Chat, ChatKind, Contact, Content, Delivery, LastMessage, Message};
+use crate::model::{
+    Chat, ChatKind, Contact, Content, Delivery, LastMessage, Message, STATUS_BROADCAST_ID,
+};
 
 mod drafts;
 mod encryption;
-pub use encryption::{archive_key_identity, copy_archive_key, forget_archive_key};
+pub use encryption::{
+    archive_key_identity, copy_archive_key, forget_archive_key, migrate_legacy_key,
+};
 mod favorites;
 pub use favorites::Favorite;
 mod labels;
@@ -980,10 +984,14 @@ impl Archive {
                 status_rank(Delivery::Failed),
             ],
         )?;
-        self.connection.execute(
-            "UPDATE chats SET last_activity = MAX(last_activity, ?2) WHERE id = ?1",
-            params![message.chat, message.timestamp],
-        )?;
+        // The status round-up is a hidden store of story updates, not a chat:
+        // its rows never reorder anything or show as a latest message.
+        if message.chat != crate::model::STATUS_BROADCAST_ID {
+            self.connection.execute(
+                "UPDATE chats SET last_activity = MAX(last_activity, ?2) WHERE id = ?1",
+                params![message.chat, message.timestamp],
+            )?;
+        }
         Ok(())
     }
 
@@ -1081,6 +1089,8 @@ impl Archive {
             "SELECT {SEARCH_COLUMNS}
              FROM messages
              WHERE json_valid(content) AND {SEARCHED_TEXT} LIKE ?1 ESCAPE '\\'
+             -- Status updates live on the Status page, not in message search.
+             AND chat <> '{STATUS_BROADCAST_ID}'
              ORDER BY timestamp DESC, rowid DESC
              LIMIT ?2"
         );
