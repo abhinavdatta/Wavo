@@ -313,58 +313,68 @@ fn password_ask(app: &mut App, ui: &mut egui::Ui, id: &AccountId) {
                 theme::text(ui, &name, theme::semibold(15.0), palette.text);
             });
             ui.add_space(12.0);
-            let gate = app.profile_gate.as_mut().expect("gate open");
-            let busy = gate.busy;
+            let busy = app
+                .profile_gate
+                .as_ref()
+                .map(|gate| gate.busy)
+                .unwrap_or(false);
             let id_field = egui::Id::new(PASSWORD_ID);
             let mut submit = ui.memory(|memory| memory.has_focus(id_field))
                 && ui.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Enter));
-            let field = ui.add_enabled(
-                !busy,
-                egui::TextEdit::singleline(&mut gate.entry)
-                    .id(id_field)
-                    .password(true)
-                    .hint_text(gettext(locale, "Profile password"))
-                    .desired_width(240.0_f32.min(ui.available_width())),
-            );
-            if ui.memory(|memory| memory.focused().is_none()) && !busy {
-                field.request_focus();
-            }
-            if let Some(wait) = gate.wait_left() {
-                let seconds = wait.as_secs_f32().ceil().max(1.0) as u64;
-                theme::paragraph(
-                    ui,
-                    gettext(
-                        locale,
-                        "Too many wrong passwords. Try again in {seconds} s.",
-                    )
-                    .replace("{seconds}", &seconds.to_string()),
-                    theme::regular(13.0),
-                    palette.danger,
+            // The field itself sits centred, with breathing room either side
+            // of the column the text reads in.
+            ui.with_layout(Layout::top_down(Align::Center), |ui| {
+                ui.spacing_mut().item_spacing.y = 8.0;
+                let gate = app.profile_gate.as_mut().expect("gate open");
+                let field = ui.add_enabled(
+                    !busy,
+                    egui::TextEdit::singleline(&mut gate.entry)
+                        .id(id_field)
+                        .password(true)
+                        .hint_text(gettext(locale, "Profile password"))
+                        .desired_width(240.0_f32.min(ui.available_width() - 32.0)),
                 );
-                ui.ctx()
-                    .request_repaint_after(wait.min(std::time::Duration::from_millis(250)));
-            } else if gate.wrong {
-                theme::paragraph(
-                    ui,
-                    gettext(locale, "Wrong password. Try again."),
-                    theme::regular(13.0),
-                    palette.danger,
-                );
-            }
-            ui.add_space(4.0);
-            if busy {
-                theme::spinner(ui, 20.0, palette.accent);
-            } else {
-                submit |= ui
-                    .add_enabled_ui(gate.can_try(), |ui| {
-                        theme::pill_button(ui, &palette, &gettext(locale, "Open"), true)
-                    })
-                    .inner
-                    .clicked();
-            }
-            if submit {
-                app.actions.push(Action::SubmitProfilePassword);
-            }
+                if ui.memory(|memory| memory.focused().is_none()) && !busy {
+                    field.request_focus();
+                }
+                let gate = app.profile_gate.as_mut().expect("gate open");
+                if let Some(wait) = gate.wait_left() {
+                    let seconds = wait.as_secs_f32().ceil().max(1.0) as u64;
+                    theme::paragraph(
+                        ui,
+                        gettext(
+                            locale,
+                            "Too many wrong passwords. Try again in {seconds} s.",
+                        )
+                        .replace("{seconds}", &seconds.to_string()),
+                        theme::regular(13.0),
+                        palette.danger,
+                    );
+                    ui.ctx()
+                        .request_repaint_after(wait.min(std::time::Duration::from_millis(250)));
+                } else if gate.wrong {
+                    theme::paragraph(
+                        ui,
+                        gettext(locale, "Wrong password. Try again."),
+                        theme::regular(13.0),
+                        palette.danger,
+                    );
+                }
+                ui.add_space(4.0);
+                if busy {
+                    theme::spinner(ui, 20.0, palette.accent);
+                } else {
+                    submit |= ui
+                        .add_enabled_ui(gate.can_try(), |ui| {
+                            theme::pill_button(ui, &palette, &gettext(locale, "Open"), true)
+                        })
+                        .inner
+                        .clicked();
+                }
+                if submit {
+                    app.actions.push(Action::SubmitProfilePassword);
+                }
+            });
             ui.add_space(8.0);
             ui.with_layout(Layout::top_down(Align::Center), |ui| {
                 if theme::link(

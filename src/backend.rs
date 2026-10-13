@@ -698,6 +698,16 @@ pub enum Command {
     },
     /// Internal: followed channels and whether each is muted on the server.
     ChannelMutes(Vec<(String, bool)>),
+    /// Internal result of listing the account's groups as slim overviews:
+    /// id, subject, and the community hierarchy. Parents point at
+    /// themselves; subgroups carry their parent.
+    GroupOverviews(Vec<(ChatId, Option<String>, Option<ChatId>, bool)>),
+    /// Internal: reads one sender's image paths in the named chats for the
+    /// contact profile's media strip.
+    ContactMedia {
+        sender: ChatId,
+        chats: Vec<ChatId>,
+    },
     /// Internal: the pictures of followed channels, or `None` when the list
     /// could not be read.
     ChannelPictures(Option<Vec<(ChatId, ChannelPicture)>>),
@@ -750,6 +760,11 @@ pub enum Event {
     },
     /// Full chat list, newest first.
     Chats(Vec<Chat>),
+    /// One sender's media in the named chats, for the contact profile.
+    ContactMedia {
+        sender: ChatId,
+        media: Vec<(ChatId, String, std::path::PathBuf)>,
+    },
     /// Every label in creation order. Chats carry the labels they wear.
     Labels(Vec<crate::model::Label>),
     /// Unsent text stored for each chat, sent once at startup.

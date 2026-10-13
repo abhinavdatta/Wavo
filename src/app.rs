@@ -13,9 +13,9 @@ use crate::backend::{Backend, Command, Event, LinkStatus, Refusal, Unsent, Waker
 use crate::i18n::Locale;
 use crate::image_preview::PreviewState;
 use crate::model::{
-    AccountId, Action, Chat, ChatFilter, ChatId, Contact, Content, Delivery, Dialog, Gif, GifError,
-    Label, Media, MediaState, Message, Page, PickerTab, Scroll, SidebarDisplayMode, StickerPack,
-    StickerShelf, Toast, ToastKind,
+    AccountId, Action, Chat, ChatFilter, ChatId, ChatKind, Contact, Content, Delivery, Dialog, Gif,
+    GifError, Label, Media, MediaState, Message, Page, PickerTab, Scroll, SidebarDisplayMode,
+    StickerPack, StickerShelf, Toast, ToastKind,
 };
 use crate::paths::AppDirs;
 use crate::settings::{AccountRoster, NotificationSound, Settings, ThemeChoice};
@@ -1300,10 +1300,7 @@ impl App {
         if let Some(abandoned) = abandoned {
             self.remove_account(abandoned);
         }
-        // A profile closed behind the wall: a pinned one not yet opened this
-        // session asks for its password before its chats show, whoever asks
-        // to enter it (the avatar switcher, the wall's Add profile, a clicked
-        // notification).
+        // A pinned profile must not open without its password.
         if Self::pin_of(self, id).is_some()
             && !self.opened_profiles.contains(id)
             && self.profile_gate.is_none()
@@ -2155,6 +2152,45 @@ impl App {
         named
     }
 
+    /// Groups this account and the contact are both in, unlocked ones with
+    /// known subjects, newest activity first: the contact profile's "Groups
+    /// in common".
+    pub fn groups_in_common(&self, id: &str) -> Vec<Chat> {
+        let me = self.me.as_deref().unwrap_or_default();
+        let mut shared: Vec<Chat> = self
+            .chats
+            .iter()
+            .filter(|chat| {
+                chat.kind == ChatKind::Group
+                    && !chat.locked
+                    && !chat.left
+                    && !chat.name.is_empty()
+                    && chat.participants.iter().any(|member| member == id)
+                    && chat.participants.iter().any(|member| member == me)
+                    && id != me
+            })
+            .cloned()
+            .collect();
+        shared.sort_by(|a, b| b.last_activity.cmp(&a.last_activity).then(a.id.cmp(&b.id)));
+        shared
+    }
+
+    /// Media a contact posted in the chats you share with them, newest
+    /// first, for the contact profile's media strip. Reading the archive
+    /// here keeps the block's size off the frame; ids come back so a tile
+    /// that leaves the screen can drop its image from the cache.
+    /// Marks the contact profile's media strip wanted: the worker reads the
+    /// archive on its own thread and answers with `Event::ContactMedia`.
+    /// `shared` are the group chats both sides are in.
+    pub fn request_contact_media(&mut self, id: String, shared: Vec<String>) {
+        let mut chats = shared;
+        if let Some(direct) = self.chat(&id).map(|chat| chat.id.clone()) {
+            chats.insert(0, direct);
+        }
+        self.backend
+            .send(Command::ContactMedia { sender: id, chats });
+    }
+
     /// Group members matching the active composer mention query.
     pub fn mention_candidates(&self, chat: &Chat, query: &str) -> Vec<(String, String)> {
         if !chat.is_group() {
@@ -2506,6 +2542,11 @@ impl App {
                 self.me_lid = lid;
                 self.me_name = name;
                 self.me_about = about;
+            }
+            Event::ContactMedia { sender, media } => {
+                if live && self.account().contact_media_for == sender {
+                    self.account_mut().contact_media = media;
+                }
             }
             Event::Labels(labels) => {
                 self.labels = labels;
@@ -3665,7 +3706,12 @@ impl App {
         self.emoji_start = None;
         self.mention_start = None;
         self.open_chat = Some(id.clone());
-        self.page = Page::Chats;
+        // Opening a chat from a roster page keeps that page, as WhatsApp Web
+        // keeps Channels beside the opened channel; only a chat opened from
+        // the chat list moves to Chats.
+        if !matches!(self.page, Page::Status | Page::Channels | Page::Communities) {
+            self.page = Page::Chats;
+        }
         self.scroll_to_bottom = true;
         self.at_bottom = true;
         self.focus_composer = true;
@@ -7132,9 +7178,42 @@ mod tests {
         assert_eq!(roster.active, "1");
     }
 
-    /// Adding a profile from the wall must not let any profile down: the
-    /// abandoned link keeps the wall up, and the pinned profile still asks
-    /// for its password.
+    /// Opening an unpinned profile lays the window down on its account, and
+    /// the pinned one must still ask afterwards, not crash.
+    #[test]
+    fn opening_the_open_profile_then_the_pinned_one_asks_without_crashing() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut app = App::headless(AppDirs::under(directory.path()), Settings::default()).0;
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let (second, _events) = Account::detached(
+            &app.dirs,
+            AccountId::parse("2").unwrap(),
+            crate::settings::AccountSettings::default(),
+        )
+        .unwrap();
+        app.accounts.push(second);
+        let first = AccountId::first();
+        app.accounts
+            .iter_mut()
+            .find(|account| account.id == first)
+            .unwrap()
+            .settings
+            .profile_pin_hash = Some(crate::app_lock::verifier("1234"));
+        app.profile_gate = Some(ProfileGate::default());
+
+        // The open profile goes straight in.
+        app.apply(Action::PickProfile(AccountId::parse("2").unwrap()), &ctx);
+        assert!(app.profile_gate.is_none(), "the open profile shows at once");
+        assert_eq!(app.account().id.as_str(), "2");
+
+        // Back to profiles, then the pinned one asks its password.
+        app.profile_gate = Some(ProfileGate::default());
+        app.apply(Action::PickProfile(first.clone()), &ctx);
+        let gate = app.profile_gate.as_ref().expect("the pinned one asks");
+        assert_eq!(gate.asking.as_ref(), Some(&first));
+    }
+
     #[test]
     fn adding_a_profile_keeps_the_wall_up_and_the_pinned_one_asking() {
         let directory = tempfile::tempdir().unwrap();

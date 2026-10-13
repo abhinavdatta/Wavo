@@ -1531,12 +1531,26 @@ fn chat_info(app: &mut App, ui: &mut egui::Ui, id: &str) {
     } else {
         crate::i18n::gettext(app.locale, "Contact")
     };
+    // The contact profile's media strip is answered from the worker thread;
+    // ask once per contact, and only for a contact (not a group or channel).
+    let media_wanted = !chat.is_group() && !chat.is_channel();
+    if media_wanted && app.account().contact_media_for != id {
+        let shared = app
+            .groups_in_common(id)
+            .iter()
+            .map(|chat| chat.id.clone())
+            .collect();
+        app.account_mut().contact_media_for = id.to_owned();
+        app.account_mut().contact_media.clear();
+        app.request_contact_media(id.to_owned(), shared);
+    }
     title(ui, app, heading.as_ref());
     // Scale the photo and member list to fit the window.
     let window = ui.ctx().content_rect().height();
     let photo = (window * 0.34).clamp(120.0, 240.0);
     let picture = app.avatar_full(id).or_else(|| app.avatar(id));
     let mine = app.me.as_deref() == Some(id);
+    let media_wanted = media_wanted && !mine;
     let editable = chat.phone().is_some() && !mine;
     // Saving or cancelling leaves the editor buffer checked out.
     let mut editing = app.contact_edit.take().filter(|_| editable);
@@ -1765,6 +1779,99 @@ fn chat_info(app: &mut App, ui: &mut egui::Ui, id: &str) {
             .push(Action::ShowDialog(Dialog::ConfirmLeaveGroup(id.to_owned())));
     }
     ui.add_space(8.0);
+    // The contact profile: media they posted in the chats you share, then
+    // the groups you are both in, like WhatsApp's contact info.
+    if media_wanted {
+        let media = app.account().contact_media.clone();
+        if !media.is_empty() {
+            theme::text(
+                ui,
+                crate::i18n::ngettext(app.locale, "Media", "Media", media.len() as u32),
+                theme::medium(12.5),
+                palette.secondary,
+            );
+            ui.add_space(4.0);
+            let tile = 74.0;
+            egui::ScrollArea::horizontal()
+                .id_salt("contact-media")
+                .auto_shrink([false, true])
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        for (chat, message, path) in &media {
+                            let (rect, response) = ui
+                                .allocate_exact_size(egui::vec2(tile, tile), egui::Sense::click());
+                            if ui.is_rect_visible(rect) {
+                                egui::Image::new(crate::util::image_uri(path))
+                                    .fit_to_exact_size(egui::Vec2::splat(tile))
+                                    .paint_at(ui, rect);
+                            }
+                            if response
+                                .on_hover_cursor(egui::CursorIcon::PointingHand)
+                                .clicked()
+                            {
+                                app.actions.push(Action::OpenMessage {
+                                    chat: chat.clone(),
+                                    message: message.clone(),
+                                });
+                            }
+                        }
+                    });
+                });
+            ui.add_space(6.0);
+        }
+        let shared = app.groups_in_common(id);
+        if !shared.is_empty() {
+            theme::text(
+                ui,
+                crate::i18n::ngettext(
+                    app.locale,
+                    "Groups in common",
+                    "Groups in common",
+                    shared.len() as u32,
+                ),
+                theme::medium(12.5),
+                palette.secondary,
+            );
+            ui.add_space(4.0);
+            for group in shared.iter().take(5) {
+                let (rect, response) = ui.allocate_exact_size(
+                    egui::vec2(ui.available_width(), 32.0),
+                    egui::Sense::click(),
+                );
+                if ui.is_rect_visible(rect) {
+                    if response.hovered() {
+                        super::widgets::dialog_row_highlight(ui, rect, palette.surface_hover);
+                    }
+                    let picture = app.avatar(&group.id);
+                    super::widgets::paint_avatar(
+                        ui,
+                        &palette,
+                        egui::Rect::from_center_size(
+                            egui::pos2(rect.left() + 16.0, rect.center().y),
+                            egui::Vec2::splat(24.0),
+                        ),
+                        &group.name,
+                        &group.id,
+                        picture.as_deref(),
+                    );
+                    ui.painter().text(
+                        egui::pos2(rect.left() + 34.0, rect.center().y),
+                        egui::Align2::LEFT_CENTER,
+                        &group.name,
+                        theme::regular(13.0),
+                        palette.text,
+                    );
+                }
+                if response
+                    .on_hover_cursor(egui::CursorIcon::PointingHand)
+                    .clicked()
+                {
+                    app.actions
+                        .push(Action::ShowDialog(Dialog::ChatInfo(group.id.clone())));
+                }
+            }
+        }
+    }
     if chat.is_group() && !chat.participants.is_empty() {
         let members = app.participant_list(&chat);
         theme::text(

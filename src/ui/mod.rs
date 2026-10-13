@@ -217,6 +217,23 @@ fn rail(app: &mut App, ui: &mut egui::Ui) {
         if settings.clicked() {
             app.actions.push(Action::Open(Page::Settings));
         }
+        // Add profile sits a notch above Settings, as the chat list's own
+        // avatar and plus do in WhatsApp.
+        if app.has_several_accounts() || app.is_linked() {
+            ui.add_space(6.0);
+            let add = tab_icon_button(
+                ui,
+                &palette,
+                Icon::Plus,
+                false,
+                "Add profile",
+                0,
+                keys::Stop::RailAddProfile,
+            );
+            if add.clicked() {
+                app.actions.push(Action::AddAccount);
+            }
+        }
     });
 }
 

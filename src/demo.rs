@@ -10287,6 +10287,7 @@ mod tests {
                 Stop::RailStatus,
                 Stop::RailChannels,
                 Stop::RailCommunities,
+                Stop::RailAddProfile,
             ]
             .into_iter()
             .collect();
@@ -10341,8 +10342,8 @@ mod tests {
             for (modifiers, expected_stop) in [
                 (egui::Modifiers::NONE, Stop::Composer),
                 // A row has no stop, so backwards wraps to the cycle's last
-                // one, the rail's Communities tab.
-                (egui::Modifiers::SHIFT, Stop::RailCommunities),
+                // one, the rail's Add-profile button.
+                (egui::Modifiers::SHIFT, Stop::RailAddProfile),
             ] {
                 ctx.memory_mut(|memory| memory.request_focus(row));
                 frame_sized(&mut app, &ctx, 780.0, vec![key(egui::Key::Tab, modifiers)]);
@@ -10397,7 +10398,8 @@ mod tests {
                         Stop::RailChats,
                         Stop::RailStatus,
                         Stop::RailChannels,
-                        Stop::RailCommunities
+                        Stop::RailCommunities,
+                        Stop::RailAddProfile
                     ]
                 );
             }

@@ -8,7 +8,6 @@ use std::borrow::Cow;
 use egui::{Align, CornerRadius, Frame, Layout, Margin, Rect, Stroke, Vec2, pos2, vec2};
 
 use crate::app::App;
-use crate::app_lock::FormMode;
 use crate::i18n::Locale;
 use crate::model::{Action, Dialog, Page};
 use crate::privacy::{PrivacyChoice, PrivacyKind};
@@ -690,103 +689,27 @@ fn sections(app: &App) -> Vec<Section> {
         |ui, app| account(app, ui),
     );
 
+    // The Profile section keeps only the picture picker: everything else it
+    // used to repeat (name and About, password, unlinking, account
+    // management) lives once, in the Account card above.
+
     let mut change_profile = Section::new(translated(locale, "Profile"));
     change_profile.block(
-        vec![
-            translated(locale, "Change profile picture"),
-            translated(locale, "Change profile"),
-            translated(locale, "Profile password"),
-        ],
+        vec![translated(locale, "Change profile picture")],
         move |ui, app| {
             ui.horizontal(|ui| {
                 ui.set_width(ui.available_width());
-                ui.vertical(|ui| {
-                    ui.set_width((ui.available_width() - 12.0).max(200.0));
-                    ui.horizontal(|ui| {
-                        ui.set_width(ui.available_width());
-                        if theme::soft_button(
-                            ui,
-                            &palette,
-                            Some(Icon::Pencil),
-                            &crate::i18n::gettext(app.locale, "Change profile"),
-                            true,
-                        )
-                        .clicked()
-                        {
-                            app.actions.push(Action::SetProfile {
-                                name: app.me_name.clone(),
-                                about: app.me_about.clone(),
-                            });
-                        }
-                        ui.add_space(8.0);
-                        if theme::soft_button(
-                            ui,
-                            &palette,
-                            Some(Icon::Image),
-                            &crate::i18n::gettext(app.locale, "Change profile picture"),
-                            true,
-                        )
-                        .clicked()
-                        {
-                            app.actions.push(Action::PickProfilePicture);
-                        }
-                    });
-                    ui.add_space(8.0);
-                    ui.horizontal(|ui| {
-                        ui.set_width(ui.available_width());
-                        if theme::soft_button(
-                            ui,
-                            &palette,
-                            Some(Icon::Lock),
-                            &crate::i18n::gettext(app.locale, "Profile password"),
-                            true,
-                        )
-                        .clicked()
-                        {
-                            app.actions
-                                .push(Action::ProfilePinForm(Some(FormMode::Change)));
-                        }
-                        ui.add_space(8.0);
-                        if theme::soft_button(
-                            ui,
-                            &palette,
-                            Some(Icon::LogOut),
-                            &crate::i18n::gettext(app.locale, "Unlink this computer"),
-                            true,
-                        )
-                        .clicked()
-                        {
-                            app.actions.push(Action::ShowDialog(Dialog::ConfirmUnlink));
-                        }
-                    });
-                    ui.add_space(8.0);
-                    if theme::soft_button(
-                        ui,
-                        &palette,
-                        Some(Icon::Plus),
-                        &crate::i18n::gettext(app.locale, "Add account"),
-                        false,
-                    )
-                    .clicked()
-                    {
-                        app.actions.push(Action::AddAccount);
-                    }
-                    ui.add_space(8.0);
-                    if theme::soft_button(
-                        ui,
-                        &palette,
-                        Some(Icon::Trash),
-                        &crate::i18n::gettext(app.locale, "Remove this account"),
-                        false,
-                    )
-                    .clicked()
-                    {
-                        app.actions
-                            .push(Action::ShowDialog(Dialog::ConfirmRemoveAccount(
-                                app.account().id.clone(),
-                            )));
-                    }
-                });
+                if theme::soft_button(
+                    ui,
+                    &palette,
+                    Some(Icon::Image),
+                    &crate::i18n::gettext(app.locale, "Change profile picture"),
+                    true,
+                )
+                .clicked()
+                {
+                    app.actions.push(Action::PickProfilePicture);
+                }
             });
         },
     );
@@ -1587,6 +1510,8 @@ fn account(app: &mut App, ui: &mut egui::Ui) {
             {
                 app.actions.push(Action::ShowDialog(Dialog::ConfirmUnlink));
             }
+            // Account management lives once, here: repeating Add account in
+            // the Profile section made it read as a second copy.
             if theme::soft_button(
                 ui,
                 &palette,

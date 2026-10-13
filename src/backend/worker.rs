@@ -2100,6 +2100,71 @@ impl Worker {
         }
     }
 
+    /// Files the slim group overviews the connected link listed. Community
+    /// parents carry no messages, so history sync never creates their rows;
+    /// this files the parents from the server, links each subgroup to its
+    /// community, and asks full metadata only for what is missing.
+    fn file_group_overviews(
+        &mut self,
+        overviews: Vec<(ChatId, Option<String>, Option<ChatId>, bool)>,
+    ) {
+        let mut changed: HashSet<String> = HashSet::new();
+        for (id, subject, community, parent) in overviews {
+            let id = self.canonical_str(&id);
+            if ChatKind::from_id(&id) != ChatKind::Group {
+                continue;
+            }
+            let community = community.map(|parent| self.canonical_str(&parent));
+            let known = self.archive.chat(&id).ok().flatten();
+            match known {
+                Some(row) => {
+                    if row.community != community {
+                        let _ = self.archive.set_community(&id, community.as_deref());
+                        changed.insert(id.clone());
+                    }
+                    // A parent seen earlier but only as a bare "Group"
+                    // placeholder gains its subject now.
+                    if parent
+                        && !row.group_subject_known
+                        && let Some(subject) = subject
+                            .as_deref()
+                            .filter(|name| !name.trim().is_empty() && *name != "Group")
+                    {
+                        let _ = self.archive.rename_chat(&id, subject);
+                        changed.insert(id.clone());
+                    }
+                }
+                None => {
+                    let name = subject
+                        .filter(|name| !name.trim().is_empty())
+                        .unwrap_or_else(|| "Group".to_owned());
+                    if self.archive.ensure_chat(&id, &name).is_ok()
+                        && self
+                            .archive
+                            .set_community(&id, community.as_deref())
+                            .is_ok()
+                    {
+                        changed.insert(id.clone());
+                    } else {
+                        log::warn!("could not file a group from the overview list");
+                    }
+                }
+            }
+            // A parent row exists but has never been asked for: fetch its
+            // real metadata so its admin rights and picture follow.
+            if parent {
+                self.request_group_info(&id, false);
+            }
+        }
+        if changed.is_empty() {
+            return;
+        }
+        for id in &changed {
+            self.emit_chat(id);
+        }
+        self.emit_chats();
+    }
+
     /// Schedules metadata retry with backoff, or stops on permanent failure.
     fn handle_failed_group(&mut self, chat: String, permanent: bool) {
         self.group_info_retry.retain(|(_, id)| id != &chat);
@@ -2311,6 +2376,40 @@ impl Worker {
                             Err(error) => {
                                 log::debug!("followed channels not listed: {error}");
                                 let _ = channels.send(Command::ChannelPictures(None));
+                            }
+                        }
+                    });
+                    let groups_listing = client.clone();
+                    let groups_discovered = self.commands.clone();
+                    tokio::spawn(async move {
+                        // Community parents carry no messages, so history sync
+                        // never creates their rows. One overview query lists
+                        // every group with its hierarchy, filing parents from
+                        // the server and linking subgroups to them.
+                        match groups_listing.groups().list_participating().await {
+                            Ok(list) => {
+                                let overviews = list
+                                    .iter()
+                                    .map(|overview| {
+                                        (
+                                            overview.id.to_string(),
+                                            overview.subject.clone(),
+                                            overview
+                                                .parent_group_jid()
+                                                .map(|parent| parent.to_string())
+                                                .or_else(|| {
+                                                    overview
+                                                        .is_parent_group()
+                                                        .then(|| overview.id.to_string())
+                                                }),
+                                            overview.is_parent_group(),
+                                        )
+                                    })
+                                    .collect();
+                                let _ = groups_discovered.send(Command::GroupOverviews(overviews));
+                            }
+                            Err(error) => {
+                                log::debug!("groups not listed: {error}");
                             }
                         }
                     });
@@ -3950,6 +4049,46 @@ impl Worker {
         }
         for mut chat in parsed.chats {
             let id = self.canonical_str(&chat.id);
+            if id == crate::model::STATUS_BROADCAST_ID {
+                // The status round-up feeds the Status page, never the chat
+                // list: no unread, no receipts, no history state.
+                let _ = self
+                    .archive
+                    .ensure_chat(crate::model::STATUS_BROADCAST_ID, "Status");
+                for message in chat.messages {
+                    let sender = if message.from_me {
+                        self.me()
+                    } else {
+                        message
+                            .sender
+                            .clone()
+                            .map(|sender| self.canonical_str(&sender))
+                            .unwrap_or_else(|| "".to_owned())
+                    };
+                    let row = Message {
+                        id: message.id.clone(),
+                        chat: crate::model::STATUS_BROADCAST_ID.to_owned(),
+                        sender,
+                        sender_name: message.push_name,
+                        from_me: message.from_me,
+                        timestamp: message.timestamp,
+                        content: message.content,
+                        status: Delivery::None,
+                        delivered_at: None,
+                        read_at: None,
+                        quoted: None,
+                        reactions: Vec::new(),
+                        edited: false,
+                        mentions: Vec::new(),
+                        forwarded: message.forwarded,
+                        thumbnail: message.thumbnail,
+                    };
+                    if let Err(error) = self.archive.insert_message(&row, Some(&message.raw)) {
+                        log::warn!("could not store a status from history: {error}");
+                    }
+                }
+                continue;
+            }
             if id.ends_with("@broadcast") {
                 continue;
             }
@@ -5440,6 +5579,20 @@ impl Worker {
                 }
             }
             Command::ChannelPictures(list) => self.channel_pictures_listed(list),
+            Command::GroupOverviews(overviews) => self.file_group_overviews(overviews),
+            Command::ContactMedia { sender, chats } => {
+                match self.archive.contact_media(&sender, &chats) {
+                    Ok(media) => {
+                        let media = media
+                            .into_iter()
+                            .filter(|(_, _, path)| path.exists())
+                            .take(120)
+                            .collect();
+                        self.emit(Event::ContactMedia { sender, media });
+                    }
+                    Err(_error) => log::warn!("could not read contact media"),
+                }
+            }
             Command::SetFavorite(chat, favorite) => self.set_favorite_chat(&chat, favorite),
             Command::FavoritesSent {
                 through,

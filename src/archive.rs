@@ -1427,6 +1427,46 @@ impl Archive {
         self.cached_media("m.chat = ?1", params![chat])
     }
 
+    /// Media ids and paths a contact posted in the shared chats, newest
+    /// first: images, cards, and carousel cards carrying a path. Locked
+    /// chats stay out, like the conversation itself does.
+    pub fn contact_media(
+        &self,
+        sender: &str,
+        shared: &[String],
+    ) -> Result<Vec<(String, String, PathBuf)>> {
+        let marks: Vec<String> = shared.iter().map(|_| "?".to_owned()).collect();
+        let marks = marks.join(",");
+        let mut statement = self.connection.prepare(&format!(
+            "SELECT m.chat, m.id, coalesce(json_extract(m.content, '$.media.path'),
+                 json_extract(m.content, '$.card.image.path')) AS path
+             FROM messages m
+             WHERE m.from_me = 0 AND m.sender = ?1 AND path IS NOT NULL
+               AND m.chat IN ({marks})
+               AND m.chat NOT IN (SELECT id FROM chats WHERE locked = 1)
+             UNION ALL
+             SELECT m.chat, m.id, json_extract(c.value, '$.image.path')
+             FROM messages m, json_each(m.content, '$.card.carousel') c
+             WHERE m.from_me = 0 AND m.sender = ?1 AND json_extract(c.value, '$.image.path') IS NOT NULL
+               AND m.chat IN ({marks})
+               AND m.chat NOT IN (SELECT id FROM chats WHERE locked = 1)"
+        ))?;
+        let ids: Vec<&str> = shared.iter().map(String::as_str).collect();
+        let params = rusqlite::params_from_iter(
+            std::iter::once(sender)
+                .chain(ids.iter().copied())
+                .chain(ids.iter().copied()),
+        );
+        let rows = statement.query_map(params, |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                PathBuf::from(row.get::<_, String>(2)?),
+            ))
+        })?;
+        rows.collect()
+    }
+
     /// Attachment paths of the messages matching `filter` (over `messages m`),
     /// including an interactive card's image and each carousel card's image.
     fn cached_media(&self, filter: &str, params: impl rusqlite::Params) -> Result<Vec<PathBuf>> {

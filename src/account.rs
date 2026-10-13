@@ -86,6 +86,9 @@ pub struct Account {
     pub status_seen_at: Option<i64>,
     /// The status story being played: its author and update index.
     pub status_story: Option<StatusStory>,
+    /// Sender whose media the contact profile asked for, and what arrived.
+    pub contact_media_for: String,
+    pub contact_media: Vec<(String, String, std::path::PathBuf)>,
 }
 
 impl Account {
@@ -153,6 +156,8 @@ impl Account {
             pin_limit: crate::backend::PINNED_CHATS,
             status_seen_at: None,
             status_story: None,
+            contact_media_for: String::new(),
+            contact_media: Vec::new(),
         }
     }
 

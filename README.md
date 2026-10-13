@@ -6,15 +6,13 @@
 protocol. It runs on Linux, macOS, and Windows, links to your phone as a
 companion device, and has no browser engine. In our Linux test it opens in
 under a second and idles at about 200 MB of RAM, against 1.13 GB for WhatsApp
-Web and its Chromium processes ([measurements](https://wavo.rocks/benchmarks/)).
+Web and its Chromium processes.
 
 Want Spotify just as fast and native? [Spotifast](https://spotifast.rocks) is
 WAVO's sibling, built on the same
 [fastframe](https://github.com/crmne/fastframe) foundation.
 
 https://github.com/user-attachments/assets/2bf86b54-45fc-4add-8de7-c426c3cdad9b
-
-See **[wavo.rocks](https://wavo.rocks)** for downloads and guides.
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/screenshot-light.png">

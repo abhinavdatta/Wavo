@@ -38,6 +38,8 @@ pub enum Stop {
     RailStatus,
     RailChannels,
     RailCommunities,
+    /// The rail's Add-profile button, below the tabs and above Settings.
+    RailAddProfile,
 }
 
 #[derive(Clone, Copy, Debug)]
