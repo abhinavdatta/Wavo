@@ -28,6 +28,77 @@ pub fn presets() -> impl Iterator<Item = CustomTheme> {
     fastframe_theme::presets::themes::<Palette>()
 }
 
+/// WAVO's own palettes, offered like the shared ones: installed into the
+/// themes folder as files the user owns. A file already there (edited or
+/// deleted by the user) is never overwritten, so the defaults can be
+/// changed or removed like any other palette.
+pub const DEFAULT_THEMES: &[(&str, &str)] = &[
+    (
+        "cloud day.json",
+        include_str!("../assets/themes/cloud day.json"),
+    ),
+    (
+        "cyber mint.json",
+        include_str!("../assets/themes/cyber mint.json"),
+    ),
+    ("ember.json", include_str!("../assets/themes/ember.json")),
+    (
+        "forest moss.json",
+        include_str!("../assets/themes/forest moss.json"),
+    ),
+    (
+        "lavender haze.json",
+        include_str!("../assets/themes/lavender haze.json"),
+    ),
+    (
+        "nord frost.json",
+        include_str!("../assets/themes/nord frost.json"),
+    ),
+    (
+        "ocean mist.json",
+        include_str!("../assets/themes/ocean mist.json"),
+    ),
+    (
+        "peach sunset.json",
+        include_str!("../assets/themes/peach sunset.json"),
+    ),
+    (
+        "sakura dusk.json",
+        include_str!("../assets/themes/sakura dusk.json"),
+    ),
+    (
+        "warm sand.json",
+        include_str!("../assets/themes/warm sand.json"),
+    ),
+];
+
+/// Writes [`DEFAULT_THEMES`] missing from `directory` (created when
+/// needed). Runs before a scan, so the first one already lists them.
+pub fn install_default_themes(directory: &std::path::Path) {
+    if let Err(error) = std::fs::create_dir_all(directory) {
+        log::warn!(
+            "unable to create the themes folder at {}: {error}",
+            directory.display()
+        );
+        return;
+    }
+    for (filename, contents) in DEFAULT_THEMES {
+        let path = directory.join(filename);
+        if path.exists() {
+            continue;
+        }
+        // A temporary file beside the target keeps a half-written palette
+        // out of a scan that runs while this works.
+        let temporary = directory.join(format!(".{filename}.tmp"));
+        if let Err(error) =
+            std::fs::write(&temporary, contents).and_then(|()| std::fs::rename(&temporary, &path))
+        {
+            log::warn!("unable to install the default palette {filename}: {error}");
+            let _ = std::fs::remove_file(&temporary);
+        }
+    }
+}
+
 /// What the theme setting says under it while the catalogue loads or when
 /// something went wrong.
 pub fn theme_status(status: fastframe_theme::Status) -> &'static str {
@@ -1506,6 +1577,36 @@ mod tests {
         assert_eq!(
             include_str!("../contrib/omarchy/wavo-theme").replace("\r\n", "\n"),
             fastframe_theme::omarchy::hook_script("wavo")
+        );
+    }
+
+    /// Every default palette must parse as a real WAVO palette, and
+    /// installing them must leave the user's own file alone.
+    #[test]
+    fn default_themes_are_valid_palettes_installed_without_overwriting() {
+        for (filename, contents) in DEFAULT_THEMES {
+            let result: Result<Palette, String> = fastframe_theme::parse_palette(contents);
+            assert!(result.is_ok(), "{filename}: {:?}", result.err());
+            assert_eq!(
+                filename.strip_suffix(".json").unwrap(),
+                fastframe_theme::display_name(filename)
+            );
+        }
+        let directory = tempfile::tempdir().unwrap();
+        install_default_themes(directory.path());
+        for (filename, contents) in DEFAULT_THEMES {
+            assert_eq!(
+                std::fs::read(directory.path().join(filename)).unwrap(),
+                contents.as_bytes(),
+                "{filename}"
+            );
+        }
+        std::fs::write(directory.path().join("ember.json"), "mine").unwrap();
+        install_default_themes(directory.path());
+        assert_eq!(
+            std::fs::read_to_string(directory.path().join("ember.json")).unwrap(),
+            "mine",
+            "the user's palette is untouched"
         );
     }
 

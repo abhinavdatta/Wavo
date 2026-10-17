@@ -9672,7 +9672,7 @@ mod tests {
                     }),
             );
         }
-        assert_eq!(opened, ["https://wavo.rocks/themes/"]);
+        assert_eq!(opened, ["https://zapfast.rocks/themes/"]);
     }
 
     /// The chat list is one clickable surface: each row starts where the one

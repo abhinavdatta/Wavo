@@ -1149,6 +1149,7 @@ fn row(app: &mut App, ui: &mut egui::Ui, chat: &Chat) -> egui::Response {
     let menu_width = widgets::menu_width(
         ui,
         &[
+            "Contact info",
             "Mark as read",
             "Mark as unread",
             "Pin to top",
@@ -1156,11 +1157,10 @@ fn row(app: &mut App, ui: &mut egui::Ui, chat: &Chat) -> egui::Response {
             "Unarchive",
             &crate::i18n::gettext(app.locale, "Leave group"),
             &crate::i18n::gettext(app.locale, "Leave channel"),
-            "Mute for 8 hours",
-            "Mute for a week",
-            "Mute indefinitely",
+            "Unmute notifications",
             "Unlock chat",
             "Copy number",
+            "Clear chat",
         ],
         true,
     )
@@ -1169,6 +1169,7 @@ fn row(app: &mut App, ui: &mut egui::Ui, chat: &Chat) -> egui::Response {
         widgets::menu_width(
             ui,
             &[
+                "Mute notifications",
                 "Notification sound",
                 &crate::i18n::gettext(app.locale, "Labels"),
             ],
@@ -1484,7 +1485,17 @@ fn compact_badge_center(avatar: Rect) -> egui::Pos2 {
     pos2(avatar.right() - 6.0, avatar.top() + 2.0)
 }
 
+/// The chat list's right-click menu, ordered like WhatsApp's: contact info
+/// first, then read state and notification controls, favourites and lists,
+/// then archive, pin and lock, and the destructive group at the bottom.
+/// Items WhatsApp offers that WAVO cannot do (searching the chat, selecting
+/// messages, disappearing timers, per-chat themes, calls, reporting,
+/// blocking) stay out rather than dead.
 fn context_menu(app: &mut App, ui: &mut egui::Ui, chat: &Chat, palette: &Palette) {
+    if widgets::menu_item(ui, palette, Some(Icon::Info), "Contact info") {
+        app.actions
+            .push(Action::ShowDialog(Dialog::ChatInfo(chat.id.clone())));
+    }
     if chat.looks_unread()
         && widgets::menu_item(ui, palette, Some(Icon::CheckCheck), "Mark as read")
     {
@@ -1495,15 +1506,8 @@ fn context_menu(app: &mut App, ui: &mut egui::Ui, chat: &Chat, palette: &Palette
     {
         app.actions.push(Action::MarkUnread(chat.id.clone()));
     }
-    if widgets::menu_item(
-        ui,
-        palette,
-        Some(if chat.pinned { Icon::PinOff } else { Icon::Pin }),
-        if chat.pinned { "Unpin" } else { "Pin to top" },
-    ) {
-        app.actions
-            .push(Action::SetPinned(chat.id.clone(), !chat.pinned));
-    }
+    mute_menu(app, ui, palette, chat);
+    sound_menu(app, ui, palette, chat);
     // Channels cannot be favorites, as on the phone.
     if !chat.is_channel() {
         // Bound before the call so the translated text outlives the borrow.
@@ -1517,6 +1521,8 @@ fn context_menu(app: &mut App, ui: &mut egui::Ui, chat: &Chat, palette: &Palette
                 .push(Action::SetFavorite(chat.id.clone(), !chat.favorite));
         }
     }
+    // WhatsApp's "Add to list" is our labels.
+    labels::chat_menu(app, ui, chat, palette);
     if widgets::menu_item(
         ui,
         palette,
@@ -1530,38 +1536,15 @@ fn context_menu(app: &mut App, ui: &mut egui::Ui, chat: &Chat, palette: &Palette
         app.actions
             .push(Action::SetArchived(chat.id.clone(), !chat.archived));
     }
-    // Bound before the call so the translated text outlives the borrow.
-    let leave_label = if chat.is_channel() {
-        crate::i18n::gettext(app.locale, "Leave channel")
-    } else {
-        crate::i18n::gettext(app.locale, "Leave group")
-    };
-    if chat.can_leave(&app.our_ids())
-        && widgets::menu_item(ui, palette, Some(Icon::LogOut), leave_label.as_ref())
-    {
+    if widgets::menu_item(
+        ui,
+        palette,
+        Some(if chat.pinned { Icon::PinOff } else { Icon::Pin }),
+        if chat.pinned { "Unpin" } else { "Pin to top" },
+    ) {
         app.actions
-            .push(Action::ShowDialog(Dialog::ConfirmLeaveGroup(
-                chat.id.clone(),
-            )));
+            .push(Action::SetPinned(chat.id.clone(), !chat.pinned));
     }
-    let now = crate::util::now();
-    if chat.muted(now) {
-        if widgets::menu_item(ui, palette, Some(Icon::Bell), "Unmute") {
-            app.actions.push(Action::SetMuted(chat.id.clone(), None));
-        }
-    } else {
-        for (label, until) in [
-            ("Mute for 8 hours", Some(now + 8 * 3600)),
-            ("Mute for a week", Some(now + 7 * 86_400)),
-            ("Mute indefinitely", Some(0)),
-        ] {
-            if widgets::menu_item(ui, palette, Some(Icon::BellOff), label) {
-                app.actions.push(Action::SetMuted(chat.id.clone(), until));
-            }
-        }
-    }
-    sound_menu(app, ui, palette, chat);
-    labels::chat_menu(app, ui, chat, palette);
     if widgets::menu_item(
         ui,
         palette,
@@ -1588,9 +1571,32 @@ fn context_menu(app: &mut App, ui: &mut egui::Ui, chat: &Chat, palette: &Palette
     {
         app.actions.push(Action::CopyText(format!("+{phone}")));
     }
-    if widgets::menu_item(ui, palette, Some(Icon::Info), "Info") {
+    let leave_label = if chat.is_channel() {
+        crate::i18n::gettext(app.locale, "Leave channel")
+    } else {
+        crate::i18n::gettext(app.locale, "Leave group")
+    };
+    if chat.can_leave(&app.our_ids())
+        && widgets::menu_item(ui, palette, Some(Icon::LogOut), leave_label.as_ref())
+    {
         app.actions
-            .push(Action::ShowDialog(Dialog::ChatInfo(chat.id.clone())));
+            .push(Action::ShowDialog(Dialog::ConfirmLeaveGroup(
+                chat.id.clone(),
+            )));
+    }
+    // Clearing reaches the phone, so it waits for a connection, as deleting
+    // does.
+    if widgets::menu_item_enabled(
+        ui,
+        palette,
+        Some(Icon::Eraser),
+        "Clear chat",
+        app.is_connected(),
+    ) {
+        app.actions
+            .push(Action::ShowDialog(Dialog::ConfirmClearChat(
+                chat.id.clone(),
+            )));
     }
     // Deleting reaches the phone, so it waits for a connection.
     let connected = matches!(app.link, LinkStatus::Connected);
@@ -1599,6 +1605,30 @@ fn context_menu(app: &mut App, ui: &mut egui::Ui, chat: &Chat, palette: &Palette
             .push(Action::ShowDialog(Dialog::ConfirmDeleteChat(
                 chat.id.clone(),
             )));
+    }
+}
+
+/// WhatsApp nests the mute choices under "Mute notifications"; a muted chat
+/// offers Unmute directly, as there.
+fn mute_menu(app: &mut App, ui: &mut egui::Ui, palette: &Palette, chat: &Chat) {
+    let now = crate::util::now();
+    if chat.muted(now) {
+        if widgets::menu_item(ui, palette, Some(Icon::Bell), "Unmute notifications") {
+            app.actions.push(Action::SetMuted(chat.id.clone(), None));
+        }
+    } else {
+        widgets::submenu(ui, palette, Icon::BellOff, "Mute notifications", |ui| {
+            for (label, until) in [
+                ("For 8 hours", Some(now + 8 * 3600)),
+                ("For a week", Some(now + 7 * 86_400)),
+                ("Always", Some(0)),
+            ] {
+                if widgets::menu_item(ui, palette, None, label) {
+                    app.actions.push(Action::SetMuted(chat.id.clone(), until));
+                    ui.close();
+                }
+            }
+        });
     }
 }
 

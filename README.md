@@ -76,6 +76,9 @@ https://github.com/user-attachments/assets/2bf86b54-45fc-4add-8de7-c426c3cdad9b
 Flatpak packaging lives in `packaging/flatpak/`; publication to Flathub is
 pending.
 
+Every release's changes are listed in [changelog.html](changelog.html), and in
+detail on the [releases page](https://github.com/abhinavdatta/wavo/releases).
+
 WAVO needs OpenGL 2.1 or newer. On Windows, install the driver from the maker
 of the graphics chip if the default falls short; WAVO will say so instead of
 starting on an unusable driver.

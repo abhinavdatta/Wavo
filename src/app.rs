@@ -4091,8 +4091,12 @@ impl App {
 
     pub fn load_custom_themes(&mut self) {
         let waker = self.waker.clone();
+        let directory = self.dirs.config.join("themes");
+        // WAVO's own palettes are files like any other, written once when
+        // missing; the user's edits and deletions stick.
+        crate::theme::install_default_themes(&directory);
         self.custom_themes.start(
-            self.dirs.config.join("themes"),
+            directory,
             self.settings.custom_theme.clone(),
             &fastframe_theme::Waker::new(move || waker.wake()),
         );
