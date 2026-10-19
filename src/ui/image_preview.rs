@@ -82,7 +82,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
             // Inset from the window's edges, so the title does not touch the
             // left one and the close button keeps clear of the right.
             // The header drags the window, and its actions stay clear of the
-            // caption buttons ZapFast draws over the window's corners.
+            // caption buttons WAVO draws over the window's corners.
             super::caption_drag(ui, header_rect);
             let room = super::caption_room(ui.ctx(), header_rect, 0.0);
             let inset = header_rect.shrink2(vec2(14.0, 0.0));
@@ -698,7 +698,7 @@ fn still(
                 |ui| {
                     ui.label(crate::i18n::gettext(
                         app.locale,
-                        "This image could not be displayed in ZapFast.",
+                        "This image could not be displayed in WAVO.",
                     ));
                     if ui
                         .button(crate::i18n::gettext(app.locale, "Open externally"))

@@ -602,7 +602,7 @@ impl CameraCapture {
         let stopping = Arc::clone(&running);
         let forced = Arc::clone(&keyframe);
         std::thread::Builder::new()
-            .name("zapfast-camera".to_owned())
+            .name("wavo-camera".to_owned())
             .spawn(move || {
                 let _alive = alive;
                 let controls = CaptureControls {
@@ -1245,7 +1245,7 @@ fn decode_remote(
     ticks: async_channel::Sender<VideoTick>,
 ) {
     let spawned = std::thread::Builder::new()
-        .name("zapfast-remote-video".to_owned())
+        .name("wavo-remote-video".to_owned())
         .spawn(move || {
             use openh264::formats::YUVSource as _;
 

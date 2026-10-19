@@ -1,21 +1,21 @@
 [package]
-name = "zapfast"
-version = "0.19.0"
+name = "wavo"
+version = "0.19.2"
 edition = "2024"
 rust-version = "1.98"
 license = "MIT"
 description = "A native WhatsApp client built with Rust and egui"
-homepage = "https://zapfast.rocks"
-repository = "https://github.com/crmne/zapfast"
+homepage = "https://github.com/abhinavdatta/wavo"
+repository = "https://github.com/abhinavdatta/wavo"
 keywords = ["whatsapp", "chat", "egui", "messaging"]
 categories = ["gui"]
 
 [lib]
-name = "zapfast"
+name = "wavo"
 path = "src/lib.rs"
 
 [[bin]]
-name = "zapfast"
+name = "wavo"
 path = "src/main.rs"
 
 [dependencies]
@@ -46,6 +46,9 @@ egui_extras = { version = "0.36.2", features = ["file", "image", "svg", "webp", 
 skrifa = "0.44"
 # Decodes JPEG, PNG, WebP, and GIF images.
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif"] }
+# Renders PDF pages in the built-in viewer. Binds to a Pdfium library at
+# runtime; machines without one keep opening PDFs in their desktop app.
+libloading = "0.8"
 # WhatsApp Web protocol: pairing, encryption, history sync, and media. Version
 # 0.7.0 on crates.io enables `simd`, which needs nightly Rust. This commit builds
 # on stable and includes snapshot recovery and no-progress conflict handling
@@ -56,7 +59,7 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png",
 # and recent sticker sync events (#1538), boolean AB props (#1539), favorite
 # chats sync (#1544), media re-upload that works and expired downloads that no
 # longer force a media_conn refresh each (#1648, #1653, #1659; the 429s of
-# ZapFast #405), and the typed send, edit, picture and poll APIs (#1614, #1626,
+# WAVO #405), and the typed send, edit, picture and poll APIs (#1614, #1626,
 # #1630, #1640). Protobuf structs are non-exhaustive since #1676, so they are
 # built from `Default` and assigned field by field. Device-store
 # compatibility retains the legacy created_at column. All carried fixes have

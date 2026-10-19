@@ -50,7 +50,7 @@ jobs:
 
   # The Windows packages, installed for real with stand-in program files: the
   # Inno Setup installer, the MSI taking it over, an update, and uninstalling
-  # with ZapFast running and without. Releases build both from these files.
+  # with WAVO running and without. Releases build both from these files.
   windows-installer:
     name: Windows installer
     runs-on: windows-latest
@@ -79,12 +79,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $payload = "dist\windows-input-x86_64-pc-windows-msvc"
           New-Item -ItemType Directory -Force $payload | Out-Null
-          Copy-Item "$env:SystemRoot\System32\PING.EXE" "$payload\zapfast.exe"
-          Copy-Item README.md, LICENSE, THIRD-PARTY-NOTICES.md, packaging\windows\zapfast-installer.txt $payload
+          Copy-Item "$env:SystemRoot\System32\PING.EXE" "$payload\wavo.exe"
+          Copy-Item README.md, LICENSE, THIRD-PARTY-NOTICES.md, packaging\windows\wavo-installer.txt $payload
           native-packages build --version 0.0.1 --target windows-amd64 `
             --defer-recipes --output "$env:RUNNER_TEMP\windows-packages"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Get-ChildItem "$env:RUNNER_TEMP\windows-packages\packages\windows-amd64\msi\zapfast-v0.0.1-x86_64-pc-windows-msvc.msi"
+          Get-ChildItem "$env:RUNNER_TEMP\windows-packages\packages\windows-amd64\msi\wavo-v0.0.1-x86_64-pc-windows-msvc.msi"
 
   installation:
     name: Install (${{ matrix.os }}, ${{ matrix.image }})
@@ -138,10 +138,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libasound2t64 libpipewire-0.3-0t64
-          set -- dist/native-packages/packages/"$TARGET"/appimage/zapfast-*-"$ARCH".AppImage
+          set -- dist/native-packages/packages/"$TARGET"/appimage/wavo-*-"$ARCH".AppImage
           test "$#" -eq 1
           chmod +x "$1"
-          "$1" --appimage-extract-and-run --version | grep -Ex '(zapfast|fastsapp) [0-9]+\.[0-9]+\.[0-9]+.*'
+          "$1" --appimage-extract-and-run --version | grep -Ex '(wavo|fastsapp) [0-9]+\.[0-9]+\.[0-9]+.*'
 
   user-installer:
     name: User installer

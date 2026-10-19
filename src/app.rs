@@ -567,6 +567,8 @@ pub struct App {
     pauses_media: bool,
     /// Image currently shown in the native preview.
     pub image_preview: Option<PreviewState>,
+    /// Document currently shown in the built-in PDF viewer.
+    pub pdf_preview: Option<crate::pdf_preview::PdfState>,
     /// The motion photo whose clip plays over it: its chat and message.
     pub motion_playing: Option<(ChatId, String)>,
     /// Sticker currently shown large.
@@ -758,7 +760,7 @@ pub struct App {
     /// texture each is drawn through.
     pub call_member_frames: HashMap<String, std::sync::Arc<egui::ColorImage>>,
     pub call_member_textures: HashMap<String, CallTexture>,
-    /// Whether ZapFast starts at login, when this installation supports it.
+    /// Whether WAVO starts at login, when this installation supports it.
     pub start_with_system: Option<bool>,
     /// The read or change of the login item running on its thread.
     login_item: crate::autostart::LoginItem,
@@ -780,7 +782,7 @@ pub struct App {
     /// its command line tool.
     #[cfg(test)]
     test_raised: bool,
-    /// Whether the tray menu offers "Lock ZapFast": whether an app lock
+    /// Whether the tray menu offers "Lock WAVO": whether an app lock
     /// password was set when it last changed.
     tray_lockable: bool,
     /// Whether the app is running without a window.
@@ -810,6 +812,20 @@ pub struct App {
     /// The app lock: whether the window shows only the lock screen, the
     /// inactivity count, and the Settings password form.
     pub app_lock: crate::app_lock::AppLock,
+    /// The Settings form for a profile's opening password: the account it
+    /// belongs to and the form's fields.
+    pub profile_pin_form: Option<(AccountId, crate::app_lock::Form)>,
+    /// The running check of the Settings PIN form, with the account it
+    /// belongs to.
+    profile_pin_job: Option<std::sync::mpsc::Receiver<(AccountId, crate::app_lock::Outcome)>>,
+    /// The profile gate shown at app start: a profile wall over everything
+    /// else, asking each pinned profile for its password before its chats
+    /// show. `None` while the gate is not up.
+    pub profile_gate: Option<ProfileGate>,
+    /// Profiles already opened this session behind a password. A pinned one
+    /// is left asking unless it is here: switching back to an unlocked
+    /// profile does not re-ask.
+    opened_profiles: std::collections::HashSet<AccountId>,
     /// Spoken announcements for screen readers, emitted every frame.
     pub announcer: crate::announcer::Announcer,
     /// Whether "Connection lost" was announced, so the way back is announced
@@ -817,6 +833,57 @@ pub struct App {
     announced_offline: bool,
     /// "Connecting" is spoken once per offline episode, not on every retry.
     announced_connecting: bool,
+}
+
+/// The profile gate's state: which profile is being asked for its password,
+/// the password field, and whether the last try was wrong.
+#[derive(Default)]
+pub struct ProfileGate {
+    /// The profile awaiting its password, when one was picked.
+    pub asking: Option<AccountId>,
+    pub entry: String,
+    /// A check is running on the password thread.
+    pub busy: bool,
+    /// The last try was wrong.
+    pub wrong: bool,
+    /// When the next try may happen, after wrong ones.
+    pub retry_at: Option<std::time::Instant>,
+    /// Consecutive wrong tries.
+    pub failures: u32,
+    /// The finished check; polled by `tick_app_lock`.
+    job: Option<std::sync::mpsc::Receiver<bool>>,
+}
+
+impl ProfileGate {
+    /// How long until another password may be tried, if it must wait.
+    pub fn wait_left(&self) -> Option<std::time::Duration> {
+        let at = self.retry_at?;
+        let left = at.saturating_duration_since(std::time::Instant::now());
+        (!left.is_zero()).then_some(left)
+    }
+
+    /// Whether the password field may try its password now.
+    pub fn can_try(&self) -> bool {
+        self.asking.is_some() && !self.busy && self.wait_left().is_none() && !self.entry.is_empty()
+    }
+
+    /// Applies the password thread's answer.
+    fn verify(&mut self, ok: bool) {
+        self.busy = false;
+        if ok {
+            self.entry.clear();
+            self.wrong = false;
+            self.failures = 0;
+            self.retry_at = None;
+            return;
+        }
+        self.failures = self.failures.saturating_add(1);
+        self.wrong = true;
+        let extra = self.failures.saturating_sub(3);
+        let wait = std::time::Duration::from_secs(1u64 << extra.min(5))
+            .min(std::time::Duration::from_secs(30));
+        self.retry_at = (!wait.is_zero()).then_some(std::time::Instant::now() + wait);
+    }
 }
 
 /// A message that flashes after a jump to it, as WhatsApp does.
@@ -993,7 +1060,7 @@ fn wayland_session() -> bool {
 }
 
 /// The app outlives its window: closing it with "keep running" on hides
-/// ZapFast, and the tray, a notification or another launch brings it back.
+/// WAVO, and the tray, a notification or another launch brings it back.
 impl fastframe_shell::Resident for App {
     fn closed(&self) -> fastframe_shell::Closed {
         if self.quit_requested {
@@ -1068,25 +1135,25 @@ fn tray_action(event: fastframe_tray::Event, window_hidden: bool) -> Option<Acti
     })
 }
 
-/// The tray item: ZapFast's icon, and a menu to show or hide the window,
+/// The tray item: WAVO's icon, and a menu to show or hide the window,
 /// to lock it while an app lock password is set, and to quit. The title and
 /// the menu never name a chat, so they are safe while locked.
 ///
-/// "Lock ZapFast" is always in the menu, hidden without a password;
+/// "Lock WAVO" is always in the menu, hidden without a password;
 /// `App::sync_tray` shows or hides it as the password is set or removed.
 fn tray_config(lockable: bool) -> fastframe_tray::Config {
     use fastframe_tray::MenuItem;
     fastframe_tray::Config {
-        id: "zapfast",
-        title: "ZapFast".into(),
+        id: "wavo",
+        title: "WAVO".into(),
         icon: crate::util::app_icon_rgba,
         template_icon: Some(crate::util::tray_template_rgba),
         // The tray icon is the app icon, so hosts that draw only named icons
         // may use the installed one.
         themed_icon: true,
         menu: vec![
-            MenuItem::action(TRAY_SHOW, "Show or hide ZapFast"),
-            MenuItem::action(TRAY_LOCK, "Lock ZapFast").visible(lockable),
+            MenuItem::action(TRAY_SHOW, "Show or hide WAVO"),
+            MenuItem::action(TRAY_LOCK, "Lock WAVO").visible(lockable),
             MenuItem::Separator,
             MenuItem::action(TRAY_QUIT, "Quit"),
         ],
@@ -1153,8 +1220,13 @@ impl App {
         app.pauses_media = true;
         app.call_tones = crate::call_tones::Tones::new(true);
         app.badge = Some(crate::notify::Badge::new(fastframe_desktop::desktop_entry(
-            "zapfast",
+            "wavo",
         )));
+        // Any profile protected by a password holds the wall up at start:
+        // its password, or another profile's choice, must let it down.
+        if app.any_profile_pinned() {
+            app.profile_gate = Some(crate::app::ProfileGate::default());
+        }
         app.custom_themes
             .enable_desktop_themes(crate::theme::DESKTOP_THEMES);
         app.load_custom_themes();
@@ -1229,7 +1301,7 @@ impl App {
     pub fn start_hidden(&mut self) {
         self.hide_intent = true;
         // No window will attach the tray, which makes the macOS item; make
-        // it now without bringing ZapFast forward.
+        // it now without bringing WAVO forward.
         if let Some(tray) = &mut self.tray {
             tray.create_item();
         }
@@ -1279,7 +1351,7 @@ impl App {
                 _ => Palette::dark(),
             });
         let locale = crate::i18n::resolve(settings.interface_language);
-        // With a password set, ZapFast starts locked.
+        // With a password set, WAVO starts locked.
         let app_lock = crate::app_lock::AppLock::new(settings.app_lock_hash.is_some());
         let tray_lockable = settings.app_lock_hash.is_some();
         let mut app = Self {
@@ -1381,6 +1453,7 @@ impl App {
             media_hold: None,
             pauses_media: false,
             image_preview: None,
+            pdf_preview: None,
             motion_playing: None,
             sticker_view: None,
             viewer_media: Vec::new(),
@@ -1491,6 +1564,10 @@ impl App {
             notifications: Default::default(),
             badge: None,
             app_lock,
+            profile_gate: None,
+            opened_profiles: std::collections::HashSet::new(),
+            profile_pin_form: None,
+            profile_pin_job: None,
             announcer: Default::default(),
             announced_offline: false,
             announced_connecting: false,
@@ -1626,6 +1703,19 @@ impl App {
         self.adding_account = false;
         if let Some(abandoned) = abandoned {
             self.remove_account(abandoned);
+        }
+        // A pinned profile must not open without its password.
+        if Self::pin_of(self, id).is_some()
+            && !self.opened_profiles.contains(id)
+            && self.profile_gate.is_none()
+        {
+            self.show_profile_gate();
+            if let Some(gate) = &mut self.profile_gate {
+                gate.asking = Some(id.clone());
+            }
+            self.save_roster();
+            self.report_presence();
+            return;
         }
         self.restore_composer();
         // Labels belong to their account: show the one this account showed.
@@ -1868,7 +1958,7 @@ impl App {
 
     /// Whether a panel shows the tray item now, so a hidden window can be
     /// brought back from it. On Linux the item exists before a panel shows
-    /// it (ZapFast started at login before the panel), and on a desktop
+    /// it (WAVO started at login before the panel), and on a desktop
     /// without one it never is.
     fn tray_shown(&self) -> bool {
         #[cfg(test)]
@@ -1918,7 +2008,7 @@ impl App {
         );
     }
 
-    /// Offers "Lock ZapFast" in the tray exactly while an app lock password
+    /// Offers "Lock WAVO" in the tray exactly while an app lock password
     /// is set, so setting or removing one changes the menu at once.
     fn sync_tray(&mut self) {
         let lockable = self.settings.app_lock_hash.is_some();
@@ -2088,11 +2178,11 @@ impl App {
     }
 
     /// Announces a message while the app lock is on, or with notification
-    /// content turned off: "New message" from ZapFast, without the chat, the
+    /// content turned off: "New message" from WAVO, without the chat, the
     /// sender, the text or a picture, so the desktop shows nothing the lock
     /// screen hides. A chat's own sound and the mention sound would tell who
     /// wrote, so only the message sound plays, still silent for groups when
-    /// group sounds are off. The click target stays inside ZapFast: it opens
+    /// group sounds are off. The click target stays inside WAVO: it opens
     /// the message, once unlocked behind the lock.
     fn notify_without_content(
         &mut self,
@@ -2683,6 +2773,45 @@ impl App {
         named
     }
 
+    /// Groups this account and the contact are both in, unlocked ones with
+    /// known subjects, newest activity first: the contact profile's "Groups
+    /// in common".
+    pub fn groups_in_common(&self, id: &str) -> Vec<Chat> {
+        let me = self.me.as_deref().unwrap_or_default();
+        let mut shared: Vec<Chat> = self
+            .chats
+            .iter()
+            .filter(|chat| {
+                chat.kind == ChatKind::Group
+                    && !chat.locked
+                    && !chat.left
+                    && !chat.name.is_empty()
+                    && chat.participants.iter().any(|member| member == id)
+                    && chat.participants.iter().any(|member| member == me)
+                    && id != me
+            })
+            .cloned()
+            .collect();
+        shared.sort_by(|a, b| b.last_activity.cmp(&a.last_activity).then(a.id.cmp(&b.id)));
+        shared
+    }
+
+    /// Media a contact posted in the chats you share with them, newest
+    /// first, for the contact profile's media strip. Reading the archive
+    /// here keeps the block's size off the frame; ids come back so a tile
+    /// that leaves the screen can drop its image from the cache.
+    /// Marks the contact profile's media strip wanted: the worker reads the
+    /// archive on its own thread and answers with `Event::ContactMedia`.
+    /// `shared` are the group chats both sides are in.
+    pub fn request_contact_media(&mut self, id: String, shared: Vec<String>) {
+        let mut chats = shared;
+        if let Some(direct) = self.chat(&id).map(|chat| chat.id.clone()) {
+            chats.insert(0, direct);
+        }
+        self.backend
+            .send(Command::ContactMedia { sender: id, chats });
+    }
+
     /// Group members matching the active composer mention query.
     ///
     /// Everyone is offered first when this group allows it and the query is a
@@ -2819,6 +2948,8 @@ impl App {
         let mut chats: Vec<&Chat> = self
             .chats
             .iter()
+            // The status round-up lives on the Status page, not in the chats.
+            .filter(|chat| !(!locked && chat.is_status()))
             .filter(|chat| chat.locked == locked)
             .filter(|chat| locked || chat.archived == self.show_archived || !needle.is_empty())
             .filter(|chat| match &self.label_filter {
@@ -3976,7 +4107,7 @@ impl App {
             Event::UpdateAvailable { version, url } => {
                 let notice = crate::updates::Release { version, url };
                 if self.update.as_ref() != Some(&notice) {
-                    self.toast(format!("ZapFast {} is available", notice.version));
+                    self.toast(format!("WAVO {} is available", notice.version));
                 }
                 self.update = Some(notice);
             }
@@ -4719,10 +4850,9 @@ impl App {
             Unsent::Sticker | Unsent::Gif => {}
         }
         let message = match reason {
-            Refusal::Offline => crate::i18n::gettext(
-                self.locale,
-                "Not sent: ZapFast is not connected to WhatsApp.",
-            ),
+            Refusal::Offline => {
+                crate::i18n::gettext(self.locale, "Not sent: WAVO is not connected to WhatsApp.")
+            }
             Refusal::QuoteUnavailable => crate::i18n::gettext(
                 self.locale,
                 "Not sent: the message you’re replying to isn’t available on this computer. Cancel the reply to send without a quote.",
@@ -5785,8 +5915,12 @@ impl App {
 
     pub fn load_custom_themes(&mut self) {
         let waker = self.waker.clone();
+        let directory = self.dirs.config.join("themes");
+        // WAVO's own palettes are files like any other, written once when
+        // missing; the user's edits and deletions stick.
+        crate::theme::install_default_themes(&directory);
         self.custom_themes.start(
-            self.dirs.config.join("themes"),
+            directory,
             self.settings.custom_theme.clone(),
             &fastframe_theme::Waker::new(move || waker.wake()),
         );
@@ -6049,6 +6183,12 @@ impl App {
                     // starred messages as it replaces the chats.
                     self.show_starred = false;
                 }
+                if matches!(page, Page::Status | Page::Channels | Page::Communities) {
+                    self.show_starred = false;
+                    self.show_archived = false;
+                    self.locked_folder = false;
+                    self.close_story();
+                }
                 // Typed passwords do not wait in a form nobody sees.
                 if page != Page::Settings && !self.app_lock.checking() {
                     self.app_lock.form = None;
@@ -6066,6 +6206,12 @@ impl App {
                     self.refocus_composer(ctx);
                 }
             }
+            Action::MarkStatusSeen => {
+                self.status_seen_at = Some(crate::util::now());
+            }
+            Action::StoryPrev => self.step_story(-1),
+            Action::StoryNext => self.step_story(1),
+            Action::CloseStory => self.close_story(),
             Action::ToggleSettings => {
                 // The button that opened settings closes them again, and
                 // closing lands on what was showing, exactly as Escape does.
@@ -6479,6 +6625,44 @@ impl App {
                 self.viewer_media_state.clear();
                 self.refocus_composer(ctx);
             }
+            Action::PreviewPdf(path) => {
+                if crate::safety::can_preview_pdf(&path) && path.is_file() {
+                    self.pdf_preview = Some(crate::pdf_preview::PdfState::new(path));
+                    self.dialog = None;
+                    self.picker = None;
+                    ctx.memory_mut(|memory| {
+                        if let Some(focused) = memory.focused() {
+                            memory.surrender_focus(focused);
+                        }
+                    });
+                } else {
+                    self.actions.push(Action::OpenFile(path));
+                }
+            }
+            Action::PdfPage(page) => {
+                if let Some(preview) = &mut self.pdf_preview {
+                    preview.goto(page);
+                }
+            }
+            Action::ZoomPdfIn => {
+                if let Some(preview) = &mut self.pdf_preview {
+                    preview.zoom_in();
+                }
+            }
+            Action::ZoomPdfOut => {
+                if let Some(preview) = &mut self.pdf_preview {
+                    preview.zoom_out();
+                }
+            }
+            Action::FitPdf => {
+                if let Some(preview) = &mut self.pdf_preview {
+                    preview.fit();
+                }
+            }
+            Action::ClosePdfPreview => {
+                self.pdf_preview = None;
+                self.refocus_composer(ctx);
+            }
             Action::PreviewSticker(path) => {
                 if path.is_file() {
                     self.sticker_view = Some(crate::image_preview::StickerPreview::new(path));
@@ -6615,7 +6799,7 @@ impl App {
                 } else if let Some(url) = crate::safety::external_url(&url) {
                     ctx.open_url(egui::OpenUrl::new_tab(url));
                 } else {
-                    self.toast_error("This link type cannot be opened from ZapFast");
+                    self.toast_error("This link type cannot be opened from WAVO");
                 }
             }
             Action::CopyText(text) => {
@@ -7758,7 +7942,7 @@ impl App {
                     self.toast_error(
                         crate::i18n::gettext(
                             self.locale,
-                            "You have {limit} labels, the most ZapFast keeps.",
+                            "You have {limit} labels, the most WAVO keeps.",
                         )
                         .replace("{limit}", &crate::archive::LABEL_LIMIT.to_string()),
                     );
@@ -8266,6 +8450,29 @@ impl App {
             // Route through the configured window-close behavior.
             Action::CloseWindow => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
             Action::SwitchAccount(id) => self.switch_account(&id),
+            Action::ShowProfileGate => self.show_profile_gate(),
+            Action::PickProfile(id) => self.pick_profile(&id),
+            Action::LeaveProfileGate => {
+                if let Some(gate) = &mut self.profile_gate {
+                    gate.asking = None;
+                    gate.entry.clear();
+                    gate.busy = false;
+                    gate.wrong = false;
+                }
+            }
+            Action::SubmitProfilePassword => self.submit_profile_password(),
+            Action::SubmitProfilePinForm => self.submit_profile_pin_form(),
+            Action::ProfilePinForm(mode) => {
+                use crate::app_lock::{Form, FormMode};
+                let pinned = self.account().settings.profile_pin_hash.is_some();
+                let fits = |mode: &FormMode| (mode == &FormMode::Set) == !pinned;
+                match mode {
+                    Some(mode) if fits(&mode) => {
+                        self.profile_pin_form = Some((self.account().id.clone(), Form::new(mode)));
+                    }
+                    _ => self.profile_pin_form = None,
+                }
+            }
             Action::AddAccount => self.add_account(),
             Action::CancelAddAccount => {
                 // Back to the account the window showed before; leaving an
@@ -8531,7 +8738,7 @@ impl App {
                 self.start_with_system = crate::autostart::switch(state);
                 if outcome.changed && matches!(state, fastframe_autostart::State::NeedsApproval(_))
                 {
-                    self.toast("Allow ZapFast in System Settings, under Login Items.");
+                    self.toast("Allow WAVO in System Settings, under Login Items.");
                 }
             }
             Err(error) => {
@@ -8542,12 +8749,35 @@ impl App {
         }
     }
 
-    /// Collects a finished password check, and locks once ZapFast has gone
+    /// Collects a finished password check, and locks once WAVO has gone
     /// unused for the chosen time. Inactivity counts while the window is
     /// hidden too: only input in the window restarts it.
     fn tick_app_lock(&mut self, ctx: &egui::Context) {
         if let Some(outcome) = self.app_lock.poll() {
             self.app_lock_outcome(outcome);
+        }
+        // A finished profile-password check. The receiver stays in `job`
+        // until its answer arrives: taking it first would drop the only
+        // copy during the check's 60 ms and leave the ask spinning forever.
+        if let Some(gate) = &mut self.profile_gate {
+            let mut opened = false;
+            if let Some(receiver) = &gate.job
+                && let Ok(ok) = receiver.try_recv()
+            {
+                gate.job = None;
+                gate.verify(ok);
+                opened = ok;
+            }
+            if opened && let Some(id) = gate.asking.clone() {
+                self.open_profile(&id);
+            }
+        }
+        // A finished Settings PIN form check.
+        if let Some(receiver) = &self.profile_pin_job
+            && let Ok((id, outcome)) = receiver.try_recv()
+        {
+            self.profile_pin_job = None;
+            self.profile_pin_outcome(id, outcome);
         }
         if self.settings.app_lock_hash.is_none() {
             // Nothing to unlock with; never leave the window stuck.
@@ -8559,7 +8789,7 @@ impl App {
         if self.app_lock.is_locked() {
             return;
         }
-        // Recording a voice message is using ZapFast, keys or not.
+        // Recording a voice message is using WAVO, keys or not.
         if self.recording.is_some() {
             self.app_lock.note_input();
         }
@@ -8648,6 +8878,208 @@ impl App {
                 self.actions
                     .push(Action::OpenUrl(format!("https://chat.whatsapp.com/{code}")));
             }
+        }
+    }
+
+    /// Whether any profile on this computer is gated by a password.
+    pub fn any_profile_pinned(&self) -> bool {
+        self.accounts
+            .iter()
+            .any(|account| account.settings.profile_pin_hash.is_some())
+    }
+
+    /// Submits the Settings form for the profile's opening password.
+    fn submit_profile_pin_form(&mut self) {
+        use crate::app_lock::{FormMode, Outcome};
+        let Some((account_id, form)) = self.profile_pin_form.as_mut() else {
+            return;
+        };
+        let account_id = account_id.clone();
+        if let Err(error) = form.check() {
+            form.error = Some(error);
+            return;
+        }
+        let stored = self
+            .accounts
+            .iter()
+            .find(|account| account.id == account_id)
+            .and_then(|account| account.settings.profile_pin_hash.clone());
+        let mode = form.mode;
+        if mode != FormMode::Set && stored.is_none() {
+            self.profile_pin_form = None;
+            return;
+        }
+        form.error = None;
+        form.busy = true;
+        let current = std::mem::take(&mut form.current);
+        let new = std::mem::take(&mut form.new);
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let waker = self.waker.clone();
+        let spawned = std::thread::Builder::new()
+            .name("profile-pin".into())
+            .spawn(move || {
+                // Changing or removing needs the current password first.
+                let outcome = if let Some(stored) = stored
+                    && mode != FormMode::Set
+                    && !crate::app_lock::verifies(&stored, &current)
+                {
+                    Outcome::WrongCurrent
+                } else {
+                    match mode {
+                        FormMode::TurnOff => Outcome::TurnOff,
+                        FormMode::Set | FormMode::Change => {
+                            Outcome::Set(crate::app_lock::verifier(&new))
+                        }
+                    }
+                };
+                let _ = sender.send((account_id, outcome));
+                waker.wake();
+            });
+        if spawned.is_ok() {
+            self.profile_pin_job = Some(receiver);
+        } else {
+            if let Some(form) = self.profile_pin_form.as_mut() {
+                form.1.busy = false;
+            }
+        }
+    }
+
+    /// Raises the profile wall over everything else at app start, when any
+    /// profile here carries a password. The first profile without one has
+    /// already been opened behind it by `start_profile_gate` below.
+    fn show_profile_gate(&mut self) {
+        if !self.any_profile_pinned() || self.profile_gate.is_some() {
+            return;
+        }
+        self.profile_gate = Some(crate::app::ProfileGate::default());
+        self.player.stop();
+        self.video.stop();
+        self.recording = None;
+        self.notifications.clear_all();
+    }
+
+    /// Opens a profile from the wall: a pinned one asks for its password
+    /// first, an open one shows at once.
+    fn pick_profile(&mut self, id: &AccountId) {
+        let pinned = Self::pin_of(self, id).is_some();
+        let Some(gate) = &mut self.profile_gate else {
+            return;
+        };
+        gate.wrong = false;
+        gate.entry.clear();
+        if pinned {
+            gate.asking = Some(id.clone());
+            gate.failures = 0;
+            gate.retry_at = None;
+        } else {
+            gate.asking = None;
+            self.open_profile(id);
+        }
+    }
+
+    /// A profile's opening-password verifier, when it has one.
+    fn pin_of(app: &App, id: &AccountId) -> Option<String> {
+        app.accounts
+            .iter()
+            .find(|account| &account.id == id)
+            .and_then(|account| account.settings.profile_pin_hash.clone())
+    }
+
+    /// Builds a verifier check on the password thread.
+    fn submit_profile_password(&mut self) {
+        let Some(account_id) = self
+            .profile_gate
+            .as_ref()
+            .and_then(|gate| gate.asking.clone())
+        else {
+            return;
+        };
+        let stored = self
+            .accounts
+            .iter()
+            .find(|account| account.id == account_id)
+            .and_then(|account| account.settings.profile_pin_hash.clone());
+        let Some(stored) = stored else {
+            return;
+        };
+        let Some(gate) = &mut self.profile_gate else {
+            return;
+        };
+        if gate.busy || gate.wait_left().is_some() || gate.entry.is_empty() {
+            return;
+        }
+        let password = std::mem::take(&mut gate.entry);
+        gate.wrong = false;
+        gate.busy = true;
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let waker = self.waker.clone();
+        match std::thread::Builder::new()
+            .name("profile-pin".into())
+            .spawn(move || {
+                let _ = sender.send(crate::app_lock::verifies(&stored, &password));
+                waker.wake();
+            }) {
+            Ok(_) => {
+                if let Some(gate) = &mut self.profile_gate {
+                    gate.job = Some(receiver);
+                }
+            }
+            Err(error) => {
+                log::warn!("could not check the profile password: {error}");
+                if let Some(gate) = &mut self.profile_gate {
+                    gate.busy = false;
+                }
+            }
+        }
+    }
+
+    /// Switches the window to a profile that is not held at the wall.
+    fn open_profile(&mut self, id: &AccountId) {
+        self.switch_account(id);
+        self.opened_profiles.insert(id.clone());
+        self.profile_gate = None;
+    }
+
+    /// Applies the Settings PIN form's answer.
+    fn profile_pin_outcome(&mut self, id: AccountId, outcome: crate::app_lock::Outcome) {
+        use crate::app_lock::Outcome;
+        let Some((_, form)) = self.profile_pin_form.as_mut() else {
+            return;
+        };
+        match outcome {
+            Outcome::WrongCurrent => {
+                form.busy = false;
+                form.error = Some(crate::app_lock::FormError::WrongCurrent);
+            }
+            Outcome::Set(verifier) => {
+                self.profile_pin_form = None;
+                if let Some(account) = self.accounts.iter_mut().find(|account| account.id == id) {
+                    account.settings.profile_pin_hash = Some(verifier);
+                    account.save_settings();
+                }
+                let name = self
+                    .accounts
+                    .iter()
+                    .find(|account| account.id == id)
+                    .map(|account| account.display_label(self.locale))
+                    .unwrap_or_default();
+                self.toast(
+                    crate::i18n::gettext(self.locale, "Profile password for {name} saved")
+                        .replace("{name}", &name),
+                );
+            }
+            Outcome::TurnOff => {
+                self.profile_pin_form = None;
+                if let Some(account) = self.accounts.iter_mut().find(|account| account.id == id) {
+                    account.settings.profile_pin_hash = None;
+                    account.save_settings();
+                }
+                self.toast(crate::i18n::gettext(
+                    self.locale,
+                    "Profile password removed",
+                ));
+            }
+            Outcome::Unlock(_) => {}
         }
     }
 
@@ -9746,6 +10178,14 @@ fn allowed_while_locked(action: &Action) -> bool {
             | Action::SetChatSound { .. }
             | Action::SetNotificationSound { .. }
             | Action::SetDownloadFolder(_)
+            // The profile wall and its password ask may move before the
+            // app lock lifts, exactly as the lock screen itself may.
+            | Action::ShowProfileGate
+            | Action::PickProfile(_)
+            | Action::LeaveProfileGate
+            | Action::SubmitProfilePassword
+            | Action::ProfilePinForm(_)
+            | Action::SubmitProfilePinForm
     )
 }
 
@@ -9859,7 +10299,7 @@ mod tests {
     }
 
     fn app() -> App {
-        let root = std::env::temp_dir().join(format!("zapfast-app-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("wavo-app-{}", std::process::id()));
         App::headless(AppDirs::under(&root), Settings::default()).0
     }
 
@@ -11201,6 +11641,112 @@ mod tests {
         assert_eq!(roster.active, "1");
     }
 
+    /// Opening an unpinned profile lays the window down on its account, and
+    /// the pinned one must still ask afterwards, not crash.
+    #[test]
+    fn opening_the_open_profile_then_the_pinned_one_asks_without_crashing() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut app = App::headless(AppDirs::under(directory.path()), Settings::default()).0;
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let (second, _events) = Account::detached(
+            &app.dirs,
+            AccountId::parse("2").unwrap(),
+            crate::settings::AccountSettings::default(),
+        )
+        .unwrap();
+        app.accounts.push(second);
+        let first = AccountId::first();
+        app.accounts
+            .iter_mut()
+            .find(|account| account.id == first)
+            .unwrap()
+            .settings
+            .profile_pin_hash = Some(crate::app_lock::verifier("1234"));
+        app.profile_gate = Some(ProfileGate::default());
+
+        // The open profile goes straight in.
+        app.apply(Action::PickProfile(AccountId::parse("2").unwrap()), &ctx);
+        assert!(app.profile_gate.is_none(), "the open profile shows at once");
+        assert_eq!(app.account().id.as_str(), "2");
+
+        // Back to profiles, then the pinned one asks its password.
+        app.profile_gate = Some(ProfileGate::default());
+        app.apply(Action::PickProfile(first.clone()), &ctx);
+        let gate = app.profile_gate.as_ref().expect("the pinned one asks");
+        assert_eq!(gate.asking.as_ref(), Some(&first));
+    }
+
+    #[test]
+    fn adding_a_profile_keeps_the_wall_up_and_the_pinned_one_asking() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut app = App::headless(AppDirs::under(directory.path()), Settings::default()).0;
+        let ctx = egui::Context::default();
+        app.attach(&ctx);
+        let (second, _events) = Account::detached(
+            &app.dirs,
+            AccountId::parse("2").unwrap(),
+            crate::settings::AccountSettings::default(),
+        )
+        .unwrap();
+        app.accounts.push(second);
+        let first = AccountId::first();
+        app.accounts
+            .iter_mut()
+            .find(|account| account.id == first)
+            .unwrap()
+            .settings
+            .profile_pin_hash = Some(crate::app_lock::verifier("1234"));
+        app.profile_gate = Some(ProfileGate::default());
+
+        app.apply(Action::AddAccount, &ctx);
+        assert!(app.adding_account);
+        assert_eq!(app.account().id.as_str(), "2");
+        assert!(
+            app.profile_gate.is_some(),
+            "adding a profile from the wall drops the wall"
+        );
+
+        app.apply(Action::PickProfile(first.clone()), &ctx);
+        let gate = app.profile_gate.as_ref().expect("the wall is still up");
+        assert_eq!(
+            gate.asking.as_ref(),
+            Some(&first),
+            "picking the pinned profile asks for its password"
+        );
+
+        // A wrong password keeps the profile locked; the right one opens it.
+        if let Some(gate) = &mut app.profile_gate {
+            gate.entry = "0000".into();
+        }
+        app.apply(Action::SubmitProfilePassword, &ctx);
+        let mut opened = false;
+        for _ in 0..100 {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            app.background_frame(&ctx);
+            if app.profile_gate.is_none() {
+                opened = true;
+                break;
+            }
+        }
+        assert!(!opened, "a wrong password must not open the profile");
+        if let Some(gate) = &mut app.profile_gate {
+            gate.entry = "1234".into();
+        }
+        app.apply(Action::SubmitProfilePassword, &ctx);
+        let mut opened = false;
+        for _ in 0..100 {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            app.background_frame(&ctx);
+            if app.profile_gate.is_none() {
+                opened = true;
+                break;
+            }
+        }
+        assert!(opened, "a correct password opens the profile at once");
+        assert_eq!(app.account().id, first);
+    }
+
     /// Two accounts, the second with a recording backend; the first on screen.
     fn two_accounts(
         directory: &std::path::Path,
@@ -11458,7 +12004,7 @@ mod tests {
         );
     }
 
-    /// `zapfast quit` takes the tray's Quit path, and does even behind the
+    /// `wavo quit` takes the tray's Quit path, and does even behind the
     /// app lock, since quitting reveals nothing.
     #[test]
     fn a_quit_request_quits_even_behind_the_lock() {
@@ -11958,7 +12504,7 @@ mod tests {
         );
     }
 
-    /// Demo and test runs share the machine with a linked ZapFast, whose real
+    /// Demo and test runs share the machine with a linked WAVO, whose real
     /// taskbar badge they must not overwrite.
     /// A background page is not an answer to a request the reader made.
     /// Counting it as one would look like the phone missing, and back off the
@@ -13425,7 +13971,7 @@ mod tests {
 
     #[test]
     fn an_album_answer_for_another_chat_is_dropped() {
-        let root = std::env::temp_dir().join(format!("zapfast-album-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("wavo-album-{}", std::process::id()));
         let (mut app, events) = App::headless(AppDirs::under(&root), Settings::default());
         app.viewer_media_chat = Some("1@s.whatsapp.net".into());
         // An album for a chat the viewer has already left arrives too late.
@@ -14010,7 +14556,7 @@ mod tests {
         assert!(!app.hide_intent);
     }
 
-    /// On Linux the tray item exists before a panel shows it (ZapFast started
+    /// On Linux the tray item exists before a panel shows it (WAVO started
     /// at login before the panel, or a desktop without one). Until a panel
     /// shows it, closing quits and the window is not hidden, since nothing
     /// could bring it back. A hidden start waits for a panel instead; see
@@ -14039,7 +14585,7 @@ mod tests {
         assert!(!Resident::start_hidden(&mut app));
     }
 
-    /// At login on GNOME the tray watcher comes up after ZapFast (#429): a
+    /// At login on GNOME the tray watcher comes up after WAVO (#429): a
     /// hidden start keeps the window hidden while it waits for a panel, stays
     /// hidden once one shows the item, and shows the window if none has
     /// within `TRAY_WAIT`.
@@ -14586,7 +15132,7 @@ mod tests {
 
     #[test]
     fn a_gone_label_leaves_the_list_showing_all_chats() {
-        let root = std::env::temp_dir().join(format!("zapfast-labels-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("wavo-labels-{}", std::process::id()));
         let (mut app, events) = App::headless(AppDirs::under(&root), Settings::default());
         let ctx = egui::Context::default();
         app.labels = vec![label("label-1", "Work"), label("label-2", "Home")];
@@ -14654,8 +15200,8 @@ mod tests {
             assert_eq!(
                 super::tray_config(lockable).menu,
                 [
-                    fastframe_tray::MenuItem::action(super::TRAY_SHOW, "Show or hide ZapFast"),
-                    fastframe_tray::MenuItem::action(super::TRAY_LOCK, "Lock ZapFast")
+                    fastframe_tray::MenuItem::action(super::TRAY_SHOW, "Show or hide WAVO"),
+                    fastframe_tray::MenuItem::action(super::TRAY_LOCK, "Lock WAVO")
                         .visible(lockable),
                     fastframe_tray::MenuItem::Separator,
                     fastframe_tray::MenuItem::action(super::TRAY_QUIT, "Quit"),
@@ -14664,7 +15210,7 @@ mod tests {
         }
     }
 
-    /// The tray offers "Lock ZapFast" as soon as a password is set and stops
+    /// The tray offers "Lock WAVO" as soon as a password is set and stops
     /// as soon as it is removed, not at the next start.
     #[test]
     fn the_tray_offers_the_lock_while_a_password_is_set() {
@@ -14787,14 +15333,14 @@ mod tests {
         let ctx = egui::Context::default();
         app.update = Some(crate::updates::Release {
             version: "99.0.0".into(),
-            url: "https://github.com/crmne/zapfast/releases/latest".into(),
+            url: "https://github.com/abhinavdatta/wavo/releases/latest".into(),
         });
         app.update_support = Some(Err("Use your package manager".into()));
         app.settings.download_updates_automatically = true;
         app.maybe_download_update();
         assert!(matches!(app.update_download, DownloadState::Idle));
         let installation = Installation {
-            executable: PathBuf::from("/fixture/zapfast"),
+            executable: PathBuf::from("/fixture/wavo"),
             kind: Kind::Portable,
         };
         app.update_support = Some(Ok(installation.clone()));
@@ -14839,7 +15385,7 @@ mod tests {
 
     #[test]
     fn losing_focus_takes_effect_before_processing_an_incoming_chat_update() {
-        let root = std::env::temp_dir().join("zapfast-focus-test");
+        let root = std::env::temp_dir().join("wavo-focus-test");
         let (mut app, events) = App::headless(AppDirs::under(&root), Settings::default());
         let mut chat = Chat::new("peer@s.whatsapp.net".into(), "Peer".into());
         chat.unread = 1;
@@ -16784,7 +17330,7 @@ mod tests {
             .unwrap();
         app.handle_events();
         assert_eq!(states(&app), [MediaState::Idle, MediaState::Downloading]);
-        let path = PathBuf::from("/cache/zapfast/media/carousel-card-1.jpg");
+        let path = PathBuf::from("/cache/wavo/media/carousel-card-1.jpg");
         events
             .send(Event::Media {
                 card: Some(1),
@@ -20080,7 +20626,7 @@ mod tests {
 
     #[test]
     fn a_saved_speed_between_choices_snaps_to_one() {
-        let root = std::env::temp_dir().join(format!("zapfast-speed-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("wavo-speed-{}", std::process::id()));
         let settings = Settings {
             voice_speed: 1.3,
             ..Settings::default()
@@ -20478,7 +21024,7 @@ mod name_tests {
     use crate::model::{Contact, Content, Delivery, MentionRef};
 
     fn app() -> App {
-        let root = std::env::temp_dir().join(format!("zapfast-names-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("wavo-names-{}", std::process::id()));
         let (mut app, _events) = App::headless(AppDirs::under(&root), Settings::default());
         app.me = Some("15550001111@s.whatsapp.net".into());
         app.me_name = Some("Carmine".into());
@@ -20783,7 +21329,7 @@ mod app_lock_tests {
 
     fn app_with(settings: Settings) -> App {
         let root = std::env::temp_dir().join(format!(
-            "zapfast-app-lock-{}-{:?}",
+            "wavo-app-lock-{}-{:?}",
             std::process::id(),
             std::thread::current().id()
         ));
@@ -21290,7 +21836,7 @@ mod app_lock_tests {
         app.lock_app();
         app.maybe_notify(CHAT, &message);
         let shown = app.notifications.shown.last().unwrap();
-        assert_eq!(shown.title, "ZapFast");
+        assert_eq!(shown.title, "WAVO");
         assert_eq!(shown.body, "New message");
         assert_eq!(shown.picture, None);
         assert_eq!(
@@ -21307,7 +21853,7 @@ mod app_lock_tests {
         app.settings.notification_content = false;
         app.maybe_notify(CHAT, &message);
         let shown = app.notifications.shown.last().unwrap().clone();
-        assert_eq!(shown.title, "ZapFast");
+        assert_eq!(shown.title, "WAVO");
         assert_eq!(shown.body, "New message");
         assert_eq!(shown.picture, None);
         assert_eq!(shown.sound, app.settings.message_sound);

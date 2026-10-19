@@ -17,7 +17,9 @@ pub mod locations;
 pub mod lock;
 pub mod login;
 pub mod message_info;
+pub mod pages;
 pub mod pane;
+pub mod pdf_preview;
 pub mod picker;
 pub mod polls;
 pub mod rail;
@@ -31,6 +33,7 @@ use crate::app::App;
 use crate::backend::LinkStatus;
 use crate::model::{Action, Page, SidebarDisplayMode, ToastKind};
 use crate::theme::{self, Icon};
+use focus::TabStop;
 
 pub fn show(app: &mut App, ui: &mut egui::Ui) {
     let ctx = ui.ctx().clone();
@@ -45,6 +48,14 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
         focus_ring(app, ctx);
         announce(app, ctx);
         window_chrome(app, ui);
+        return;
+    }
+    // The profile gate at app start: a profile wall over everything, with
+    // the password ask for a picked, pinned profile.
+    if app.profile_gate.is_some() {
+        titlebar_strip(app, ui);
+        profiles::show(app, ui);
+        focus_ring(app, ctx);
         return;
     }
     keys::handle(app, ctx);
@@ -113,6 +124,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
     image_preview::show_sticker(app, ctx);
     call::show(app, ctx);
     image_editor::show(app, ctx);
+    pdf_preview::show(app, ctx);
     drop_target(app, ctx);
     toasts(app, ctx);
     focus_ring(app, ctx);
@@ -125,7 +137,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
 /// buttons, its rows and the rail beside it lead on to the rest.
 fn list_pane_only(app: &App) -> bool {
     match app.page {
-        Page::Chats => app.current_chat().is_none(),
+        Page::Chats | Page::Status | Page::Channels | Page::Communities => {
+            app.current_chat().is_none()
+        }
         Page::Calls => app.current_chat().is_none() || !app.call_picked(),
         Page::Settings | Page::Wallpaper => false,
     }
@@ -140,8 +154,21 @@ fn announce(app: &mut App, ctx: &egui::Context) {
 /// The chat list, or the open chat or page with the list beside it unless
 /// the window is narrow.
 fn main_view(app: &mut App, ui: &mut egui::Ui, list_only: bool) {
+    if matches!(app.page, Page::Status | Page::Channels | Page::Communities) {
+        // These pages own their roster and central pane. Keep the navigation
+        // rail beside that roster just as it sits beside the chat list.
+        rail::show(app, ui, false);
+        match app.page {
+            Page::Status => pages::status::show(app, ui),
+            Page::Channels => pages::channels::show(app, ui),
+            Page::Communities => pages::communities::show(app, ui),
+            _ => unreachable!(),
+        }
+        return;
+    }
     if list_only {
-        chats::full_show(app, ui);
+        rail::show(app, ui, false);
+        chats::show(app, ui);
         return;
     }
     // A narrow window gives the open chat or page all of its width; the
@@ -178,6 +205,9 @@ fn main_view(app: &mut App, ui: &mut egui::Ui, list_only: bool) {
             match app.page {
                 Page::Settings => settings::show(app, ui),
                 Page::Chats => conversation::show(app, ui),
+                Page::Status | Page::Channels | Page::Communities => {
+                    unreachable!("roster pages are drawn before the chat central pane")
+                }
                 // The open chat stays beside the call history.
                 Page::Calls if app.current_chat().is_some() => conversation::show(app, ui),
                 Page::Calls => calls::show(app, ui),
@@ -243,8 +273,6 @@ fn narrow_slide(ctx: &egui::Context, view: Option<NarrowView>) -> Option<f32> {
 fn slide_in(app: &mut App, ui: &mut egui::Ui, list_only: bool, progress: f32) {
     // Both views are drawn in scopes of their own, so the list in either is
     // a copy of the real one, which it follows.
-    ui.ctx()
-        .data_mut(|data| data.insert_temp(chats::slide_copy_id(), true));
     let rect = ui.available_rect_before_wrap();
     if list_only {
         // The view it covers is gone (the chat is closed): its backdrop.
@@ -252,7 +280,8 @@ fn slide_in(app: &mut App, ui: &mut egui::Ui, list_only: bool, progress: f32) {
     } else {
         ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
             ui.disable();
-            chats::full_show(app, ui);
+            rail::show(app, ui, false);
+            chats::show(app, ui);
         });
     }
     let direction = if list_only { -1.0 } else { 1.0 };
@@ -263,8 +292,6 @@ fn slide_in(app: &mut App, ui: &mut egui::Ui, list_only: bool, progress: f32) {
             |ui| main_view(app, ui, list_only),
         );
     });
-    ui.ctx()
-        .data_mut(|data| data.remove::<bool>(chats::slide_copy_id()));
 }
 
 /// A slide moves what is drawn but not where presses land, so while one
@@ -500,7 +527,7 @@ fn drop_target(app: &mut App, ctx: &egui::Context) {
 }
 
 /// Connection and history-sync banner.
-/// What the banner needs beside the caption buttons ZapFast draws: its line
+/// What the banner needs beside the caption buttons WAVO draws: its line
 /// and a button.
 const BANNER_MIN_CONTENT: f32 = 320.0;
 
@@ -522,7 +549,7 @@ fn banner(app: &mut App, ui: &mut egui::Ui) {
             let update = update.as_ref().expect("checked above");
             (
                 Icon::Info,
-                format!("ZapFast {} is available", update.version),
+                format!("WAVO {} is available", update.version),
                 palette.accent,
                 false,
                 Some(update.url.clone()),
@@ -568,7 +595,7 @@ fn banner(app: &mut App, ui: &mut egui::Ui) {
         .show(ui, |ui| {
             // Over a page with no header (Settings, or no chat open) the
             // banner takes the top-right corner from the caption buttons
-            // ZapFast draws, beside them or under them.
+            // WAVO draws, beside them or under them.
             let room = caption_room(ui.ctx(), ui.max_rect(), BANNER_MIN_CONTENT);
             caption_drag(ui, ui.max_rect().with_max_y(ui.max_rect().top() + room.top));
             ui.add_space(room.top);
@@ -745,7 +772,7 @@ fn toasts(app: &mut App, ctx: &egui::Context) {
 
 /// Draggable space across the top of the linking and lock screens, which
 /// have no header: for the macOS traffic lights, or for the caption buttons
-/// ZapFast draws.
+/// WAVO draws.
 fn titlebar_strip(app: &App, ui: &mut egui::Ui) {
     let linked = app.is_linked() && !app.app_lock.is_locked();
     if linked {
@@ -780,7 +807,7 @@ pub fn titlebar_drag(ui: &mut egui::Ui, rect: egui::Rect) {
     fastframe_titlebar::drag(ui, rect);
 }
 
-/// Makes `rect` drag the window while ZapFast draws the title bar, for the
+/// Makes `rect` drag the window while WAVO draws the title bar, for the
 /// places macOS leaves to its own title bar strip: the pages, the panels at
 /// the right, and the screens over the window. Call it before the widgets
 /// inside `rect`, so they keep their clicks.
@@ -790,7 +817,7 @@ pub(crate) fn caption_drag(ui: &mut egui::Ui, rect: egui::Rect) {
     }
 }
 
-/// Where a header's own widgets go beside the caption buttons ZapFast draws
+/// Where a header's own widgets go beside the caption buttons WAVO draws
 /// (see [`caption_room`]).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct CaptionRoom {
@@ -804,7 +831,7 @@ pub(crate) struct CaptionRoom {
 }
 
 /// The room a header laid out in `rect` leaves for the caption buttons
-/// ZapFast draws over the window's top corners. Only a header that reaches
+/// WAVO draws over the window's top corners. Only a header that reaches
 /// a corner shares it: the buttons' room at that end, less what already
 /// separates the header from the window's edge. A header whose own widgets
 /// need `min_content` beside the buttons and do not get it goes under them
@@ -842,7 +869,7 @@ pub(crate) fn caption_room(ctx: &egui::Context, rect: egui::Rect, min_content: f
     }
 }
 
-/// The caption buttons ZapFast draws, over the window's top corners and
+/// The caption buttons WAVO draws, over the window's top corners and
 /// above everything else in it, and the resizable edges, while the custom
 /// title bar is on (Windows and Linux).
 fn window_chrome(app: &App, ui: &mut egui::Ui) {

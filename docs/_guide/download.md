@@ -1,21 +1,21 @@
 ---
 title: Download
-description: Get ZapFast for Linux, macOS, or Windows, with install instructions for each.
+description: Get WAVO for Linux, macOS, or Windows, with install instructions for each.
 nav_order: 1
 ---
 
-{% assign v = site.zapfast_version %}
+{% assign v = site.wavo_version %}
 {% assign name = site.release_asset_prefix %}
 {% assign app = site.release_app_name %}
-{% assign base = "https://github.com/crmne/zapfast/releases/download/v" | append: v %}
+{% assign base = "https://github.com/abhinavdatta/wavo/releases/download/v" | append: v %}
 
-ZapFast was previously called FastsApp. Version 0.13.0 introduces the new
+WAVO was previously called FastsApp. Version 0.13.0 introduces the new
 package and executable names. Your existing session and local data move
-automatically when you first start ZapFast; quit FastsApp before upgrading.
+automatically when you first start WAVO; quit FastsApp before upgrading.
 
 The current version is **v{{ v }}**. SHA-256 checksums are in
 [checksums.txt]({{ base }}/checksums.txt). Older versions are on the
-[releases page](https://github.com/crmne/zapfast/releases).
+[releases page](https://github.com/abhinavdatta/wavo/releases).
 
 ## Linux
 
@@ -31,11 +31,11 @@ yay -S {{ name }}-git    # builds from the latest commit
 With [Nix](https://nixos.org), install from the flake:
 
 ```sh
-nix profile install github:crmne/zapfast
+nix profile install github:crmne/wavo
 ```
 
 NixOS configurations can add the repository as a flake input and include
-`inputs.zapfast.packages.${pkgs.system}.default` in
+`inputs.wavo.packages.${pkgs.system}.default` in
 `environment.systemPackages`.
 
 For other distributions, download a tarball with the binary, desktop file,
@@ -75,14 +75,14 @@ Open it and drag **{{ app }}** to Applications.
 If you use [Homebrew](https://brew.sh), you can install it with:
 
 ```sh
-brew install --cask crmne/tap/zapfast
+brew install --cask crmne/tap/wavo
 ```
 
 The app is signed with Developer ID and notarized by Apple. The DMG includes
 a validated notarization ticket.
 
 When upgrading from FastsApp, remove the old FastsApp application bundle
-after installing ZapFast.
+after installing WAVO.
 
 ## Windows
 

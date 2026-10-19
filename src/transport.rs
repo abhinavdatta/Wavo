@@ -4,7 +4,7 @@
 //! address DNS returns. On a dual-stack network whose IPv6 has a route but no
 //! path past the gateway, that address never answers, and every reconnect
 //! makes the same choice, so the link stays down while IPv4 works
-//! (crmne/zapfast#212). The factory here resolves the host itself on each dial
+//! (crmne/wavo#212). The factory here resolves the host itself on each dial
 //! and races what it gets, one address every [`HEAD_START`], so a family that
 //! does not answer loses to one that does.
 //!

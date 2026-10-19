@@ -574,9 +574,9 @@ impl Downloadable for PhoneSticker {
 fn device_name() -> String {
     let host = crate::util::hostname();
     if host.is_empty() {
-        "ZapFast".to_owned()
+        "WAVO".to_owned()
     } else {
-        format!("ZapFast ({host})")
+        format!("WAVO ({host})")
     }
 }
 
@@ -957,13 +957,13 @@ fn invite_error(error: &str) -> String {
 /// unconfirmed. A healthy sync answers well within this.
 const PRIVACY_GRACE: Duration = Duration::from_secs(10);
 
-/// How long ZapFast stays "available" after the window loses focus.
+/// How long WAVO stays "available" after the window loses focus.
 const PRESENCE_LINGER: Duration = Duration::from_secs(10);
 
 /// The window owns every presence transition (#461). Left at the default
 /// `Automatic` policy, the client announces "available" whenever it connects
 /// or the push name syncs, so an account whose window sits in the tray still
-/// shows online and the phone holds back its own notifications. ZapFast
+/// shows online and the phone holds back its own notifications. WAVO
 /// announces through `Command::SetOnline` instead.
 ///
 /// Public so the integration test in `tests/presence.rs` drives the same
@@ -1201,7 +1201,7 @@ struct Worker {
     favorites_pushing: bool,
     /// More favorite changes arrived while a push was running.
     favorites_again: bool,
-    /// The phone's favorites from before ZapFast followed them were replayed.
+    /// The phone's favorites from before WAVO followed them were replayed.
     favorites_recovered: bool,
     /// That replay is running.
     favorites_recovering: bool,
@@ -2990,6 +2990,91 @@ impl Worker {
         }
     }
 
+    /// Files the slim group overviews the connected link listed. Community
+    /// parents carry no messages, so history sync never creates their rows;
+    /// this files the parents from the server, links each subgroup to its
+    /// community, and asks full metadata only for what is missing.
+    fn file_group_overviews(
+        &mut self,
+        overviews: Vec<(ChatId, Option<String>, Option<ChatId>, bool)>,
+    ) {
+        let mut changed: HashSet<String> = HashSet::new();
+        for (id, subject, community, parent) in overviews {
+            let id = self.canonical_str(&id);
+            if ChatKind::from_id(&id) != ChatKind::Group {
+                continue;
+            }
+            let community = community.map(|parent| self.canonical_str(&parent));
+            // Some server snapshots list a subgroup before its parent (or
+            // omit the parent from the participating list). Create and mark
+            // that parent here so Communities can render it immediately.
+            if let Some(parent_id) = community
+                .as_deref()
+                .filter(|parent_id| *parent_id != id.as_str())
+            {
+                let parent_row = self.archive.chat(parent_id).ok().flatten();
+                if parent_row.is_none() {
+                    let _ = self.archive.ensure_chat(parent_id, "Group");
+                    self.request_group_info(parent_id, false);
+                }
+                if parent_row
+                    .as_ref()
+                    .is_none_or(|row| row.community.as_deref() != Some(parent_id))
+                {
+                    let _ = self.archive.set_community(parent_id, Some(parent_id));
+                    changed.insert(parent_id.to_owned());
+                }
+            }
+            let known = self.archive.chat(&id).ok().flatten();
+            match known {
+                Some(row) => {
+                    if row.community != community {
+                        let _ = self.archive.set_community(&id, community.as_deref());
+                        changed.insert(id.clone());
+                    }
+                    // A parent seen earlier but only as a bare "Group"
+                    // placeholder gains its subject now.
+                    if parent
+                        && !row.group_subject_known
+                        && let Some(subject) = subject
+                            .as_deref()
+                            .filter(|name| !name.trim().is_empty() && *name != "Group")
+                    {
+                        let _ = self.archive.rename_chat(&id, subject);
+                        changed.insert(id.clone());
+                    }
+                }
+                None => {
+                    let name = subject
+                        .filter(|name| !name.trim().is_empty())
+                        .unwrap_or_else(|| "Group".to_owned());
+                    if self.archive.ensure_chat(&id, &name).is_ok()
+                        && self
+                            .archive
+                            .set_community(&id, community.as_deref())
+                            .is_ok()
+                    {
+                        changed.insert(id.clone());
+                    } else {
+                        log::warn!("could not file a group from the overview list");
+                    }
+                }
+            }
+            // A parent row exists but has never been asked for: fetch its
+            // real metadata so its admin rights and picture follow.
+            if parent {
+                self.request_group_info(&id, false);
+            }
+        }
+        if changed.is_empty() {
+            return;
+        }
+        for id in &changed {
+            self.emit_chat(id);
+        }
+        self.emit_chats();
+    }
+
     /// Schedules metadata retry with backoff, or stops on permanent failure.
     fn handle_failed_group(&mut self, chat: String, permanent: bool) {
         self.group_info_retry.retain(|(_, id)| id != &chat);
@@ -3068,6 +3153,13 @@ impl Worker {
                         }
                         participants.push(id);
                     }
+                    // A parent group points at itself; a linked subgroup
+                    // points at its community.
+                    let community = metadata
+                        .parent_group_jid
+                        .as_ref()
+                        .map(canonical)
+                        .or_else(|| metadata.is_parent_group.then(|| chat.clone()));
                     let _ = commands.send(Command::GroupInfo {
                         leave_generation,
                         chat,
@@ -3093,6 +3185,7 @@ impl Worker {
                         info_locked: metadata.is_locked,
                         admin,
                         subject_generation,
+                        community,
                     });
                 }
                 Err(error) => {
@@ -3262,6 +3355,40 @@ impl Worker {
                             }
                         }
                     });
+                    let groups_listing = client.clone();
+                    let groups_discovered = self.commands.clone();
+                    tokio::spawn(async move {
+                        // Community parents carry no messages, so history sync
+                        // never creates their rows. One overview query lists
+                        // every group with its hierarchy, filing parents from
+                        // the server and linking subgroups to them.
+                        match groups_listing.groups().list_participating().await {
+                            Ok(list) => {
+                                let overviews = list
+                                    .iter()
+                                    .map(|overview| {
+                                        (
+                                            overview.id.to_string(),
+                                            overview.subject.clone(),
+                                            overview
+                                                .parent_group_jid()
+                                                .map(|parent| parent.to_string())
+                                                .or_else(|| {
+                                                    overview
+                                                        .is_parent_group()
+                                                        .then(|| overview.id.to_string())
+                                                }),
+                                            overview.is_parent_group(),
+                                        )
+                                    })
+                                    .collect();
+                                let _ = groups_discovered.send(Command::GroupOverviews(overviews));
+                            }
+                            Err(error) => {
+                                log::debug!("groups not listed: {error}");
+                            }
+                        }
+                    });
                     tokio::spawn(async move {
                         publish_account_privacy(&client, &commands).await;
                         if let Some(me) = me {
@@ -3317,7 +3444,7 @@ impl Worker {
             }
             E::ClientOutdated(_) => {
                 self.set_status(LinkStatus::Failed(
-                    "WhatsApp rejected this version of ZapFast. Update the app".to_owned(),
+                    "WhatsApp rejected this version of WAVO. Update the app".to_owned(),
                 ));
             }
             E::Messages(batch) => {
@@ -3392,7 +3519,7 @@ impl Worker {
                         .set_ephemeral(&chat, *expiration, timestamp)
                         .unwrap_or(false);
                     log::debug!(
-                        target: "zapfast::disappearing",
+                        target: "wavo::disappearing",
                         "group timer update: duration={expiration}s timestamp={timestamp} accepted={accepted}"
                     );
                     if accepted {
@@ -4020,6 +4147,9 @@ impl Worker {
     fn ingest(&mut self, message: &Arc<wa::Message>, info: &MessageInfo) {
         self.learn_source(&info.source);
         if info.source.chat.is_status_broadcast() {
+            // Status updates are archived in their round-up chat for the
+            // Status page and never notify, bump unread, or send receipts.
+            self.ingest_status(message, info);
             return;
         }
         let chat = self.canonical(&info.source.chat);
@@ -4057,7 +4187,7 @@ impl Worker {
                         .set_ephemeral(&chat, expiration, timestamp)
                         .unwrap_or(false);
                     log::debug!(
-                        target: "zapfast::disappearing",
+                        target: "wavo::disappearing",
                         "protocol timer update: duration={expiration}s timestamp={timestamp} fallback_timestamp={used_fallback} accepted={accepted}"
                     );
                     if accepted {
@@ -4065,7 +4195,7 @@ impl Worker {
                     }
                 } else {
                     log::debug!(
-                        target: "zapfast::disappearing",
+                        target: "wavo::disappearing",
                         "protocol timer update missing expiration"
                     );
                 }
@@ -4238,6 +4368,52 @@ impl Worker {
         if is_poll {
             self.pump_poll_votes();
         }
+    }
+
+    /// Archives one `status@broadcast` message for the Status page. The chat
+    /// keeps a fixed name, its messages never bump unread or notify, and no
+    /// receipts are sent: statuses expire on the phone after 24 hours.
+    fn ingest_status(&mut self, message: &Arc<wa::Message>, info: &MessageInfo) {
+        if self.predates_removal(
+            crate::model::STATUS_BROADCAST_ID,
+            info.timestamp.timestamp(),
+        ) {
+            return;
+        }
+        let base = message.get_base_message();
+        let Some(content) = classify(message) else {
+            return;
+        };
+        let from_me = info.source.is_from_me;
+        let sender = if from_me {
+            self.me()
+        } else {
+            self.canonical(&info.source.sender)
+        };
+        let row = Message {
+            id: info.id.to_string(),
+            chat: crate::model::STATUS_BROADCAST_ID.to_owned(),
+            sender,
+            sender_name: (!info.push_name.is_empty() && !from_me)
+                .then(|| info.push_name.to_string()),
+            from_me,
+            timestamp: info.timestamp.timestamp(),
+            history_order: None,
+            content,
+            status: Delivery::None,
+            delivered_at: None,
+            read_at: None,
+            quoted: None,
+            reactions: Vec::new(),
+            edited: false,
+            mentions: Vec::new(),
+            forwarded: forwarded_of(base),
+            thumbnail: thumbnail_of(base),
+        };
+        let _ = self
+            .archive
+            .ensure_chat(crate::model::STATUS_BROADCAST_ID, "Status");
+        self.archive_message(row, Some(message.encode_to_vec()), None, false);
     }
 
     /// Applies a live location position to the share it belongs to, so a
@@ -4794,6 +4970,12 @@ impl Worker {
                 // A new live message may share the read message's second. Its
                 // distinct id already passed the duplicate check above.
                 .is_none_or(|through| message.timestamp >= through);
+        // The status round-up never counts: its updates live on the Status page.
+        let unread = if chat == crate::model::STATUS_BROADCAST_ID {
+            false
+        } else {
+            unread
+        };
         if unread {
             let _ = self.archive.bump_unread(&chat);
         } else if message.from_me
@@ -5062,6 +5244,47 @@ impl Worker {
         }
         for mut chat in parsed.chats {
             let id = self.canonical_str(&chat.id);
+            if id == crate::model::STATUS_BROADCAST_ID {
+                // The status round-up feeds the Status page, never the chat
+                // list: no unread, no receipts, no history state.
+                let _ = self
+                    .archive
+                    .ensure_chat(crate::model::STATUS_BROADCAST_ID, "Status");
+                for message in chat.messages {
+                    let sender = if message.from_me {
+                        self.me()
+                    } else {
+                        message
+                            .sender
+                            .clone()
+                            .map(|sender| self.canonical_str(&sender))
+                            .unwrap_or_else(|| "".to_owned())
+                    };
+                    let row = Message {
+                        id: message.id.clone(),
+                        chat: crate::model::STATUS_BROADCAST_ID.to_owned(),
+                        sender,
+                        sender_name: message.push_name,
+                        from_me: message.from_me,
+                        timestamp: message.timestamp,
+                        history_order: None,
+                        content: message.content,
+                        status: Delivery::None,
+                        delivered_at: None,
+                        read_at: None,
+                        quoted: None,
+                        reactions: Vec::new(),
+                        edited: false,
+                        mentions: Vec::new(),
+                        forwarded: message.forwarded,
+                        thumbnail: message.thumbnail,
+                    };
+                    if let Err(error) = self.archive.insert_message(&row, Some(&message.raw)) {
+                        log::warn!("could not store a status from history: {error}");
+                    }
+                }
+                continue;
+            }
             if id.ends_with("@broadcast") {
                 continue;
             }
@@ -5887,7 +6110,7 @@ impl Worker {
         if let Some(chat) = destination
             && !self.destination_writable(chat)
         {
-            let error = "This conversation is read-only in ZapFast".to_owned();
+            let error = "This conversation is read-only in WAVO".to_owned();
             if matches!(&command, Command::CreatePoll { .. }) {
                 self.emit(Event::PollCreated {
                     chat: chat.clone(),
@@ -6856,7 +7079,7 @@ impl Worker {
                 let Some(client) = self.client.clone() else {
                     self.emit(Event::InvitePreview {
                         code,
-                        result: Err("ZapFast is not connected to WhatsApp".to_owned()),
+                        result: Err("WAVO is not connected to WhatsApp".to_owned()),
                     });
                     return;
                 };
@@ -6885,7 +7108,7 @@ impl Worker {
                 let Some(client) = self.client.clone() else {
                     self.emit(Event::InviteJoined {
                         code,
-                        result: Err("ZapFast is not connected to WhatsApp".to_owned()),
+                        result: Err("WAVO is not connected to WhatsApp".to_owned()),
                     });
                     return;
                 };
@@ -7169,7 +7392,7 @@ impl Worker {
                         // The phone has cleared it; say so rather than leave
                         // the messages here looking as if nothing happened.
                         self.emit(Event::Error(
-                            "The phone cleared this chat, but ZapFast could not clear it here"
+                            "The phone cleared this chat, but WAVO could not clear it here"
                                 .to_owned(),
                         ));
                     }
@@ -7251,6 +7474,20 @@ impl Worker {
                 }
             }
             Command::ChannelPictures(list) => self.channel_pictures_listed(list),
+            Command::GroupOverviews(overviews) => self.file_group_overviews(overviews),
+            Command::ContactMedia { sender, chats } => {
+                match self.archive.contact_media(&sender, &chats) {
+                    Ok(media) => {
+                        let media = media
+                            .into_iter()
+                            .filter(|(_, _, path)| path.exists())
+                            .take(120)
+                            .collect();
+                        self.emit(Event::ContactMedia { sender, media });
+                    }
+                    Err(_error) => log::warn!("could not read contact media"),
+                }
+            }
             Command::SetFavorite(chat, favorite) => self.set_favorite_chat(&chat, favorite),
             Command::FavoritesSent {
                 through,
@@ -7490,6 +7727,7 @@ impl Worker {
                 info_locked,
                 admin,
                 subject_generation,
+                community,
             } => {
                 if request_generation != self.group_info_generation.get(&chat).copied().unwrap_or(0)
                 {
@@ -7510,6 +7748,30 @@ impl Worker {
                     self.archive
                         .set_group_info(&chat, name.as_deref(), &participants, read_only);
                 let _ = self.archive.set_group_rights(&chat, info_locked, admin);
+                let community = community.map(|parent| self.canonical_str(&parent));
+                if let Some(parent) = community.as_deref().filter(|parent| *parent != chat) {
+                    if self.archive.chat(parent).ok().flatten().is_none() {
+                        let _ = self.archive.ensure_chat(parent, "Group");
+                        self.request_group_info(parent, false);
+                    }
+                    let parent_row = self.archive.chat(parent).ok().flatten();
+                    if parent_row
+                        .as_ref()
+                        .is_none_or(|row| row.community.as_deref() != Some(parent))
+                    {
+                        let _ = self.archive.set_community(parent, Some(parent));
+                        self.emit_chat(parent);
+                    }
+                }
+                if self
+                    .archive
+                    .chat(&chat)
+                    .ok()
+                    .flatten()
+                    .is_none_or(|row| row.community != community)
+                {
+                    let _ = self.archive.set_community(&chat, community.as_deref());
+                }
                 if description_generation
                     >= self.description_generation.get(&chat).copied().unwrap_or(0)
                 {
@@ -8164,7 +8426,7 @@ impl Worker {
             self.emit_chat(&job.0);
             if !reported_read_only {
                 self.emit(Event::Error(
-                    "This conversation is read-only in ZapFast".to_owned(),
+                    "This conversation is read-only in WAVO".to_owned(),
                 ));
                 reported_read_only = true;
             }
@@ -9574,7 +9836,7 @@ impl Worker {
                 }
             }
             Err(_) => self.emit(Event::Error(
-                "WhatsApp accepted the deletion, but ZapFast could not remove its copy. Local cleanup is saved for restart or reconnect".to_owned(),
+                "WhatsApp accepted the deletion, but WAVO could not remove its copy. Local cleanup is saved for restart or reconnect".to_owned(),
             )),
         }
     }
@@ -12816,10 +13078,8 @@ mod tests {
 
     #[test]
     fn attachment_staging_files_are_hidden_and_exclusive() {
-        let directory = std::env::temp_dir().join(format!(
-            "zapfast-attachment-staging-{}",
-            rand::random::<u64>()
-        ));
+        let directory =
+            std::env::temp_dir().join(format!("wavo-attachment-staging-{}", rand::random::<u64>()));
         std::fs::create_dir_all(&directory).expect("creates staging directory");
         let destination = directory.join("photo.jpg");
         let (first_path, first) = temporary_attachment_file(&destination).expect("first file");
@@ -14258,7 +14518,7 @@ mod tests {
         client
             .persistence_manager()
             .process_command(whatsapp_rust::store::commands::DeviceCommand::SetPushName(
-                "ZapFast".to_owned(),
+                "WAVO".to_owned(),
             ))
             .await;
         worker.client = Some(client);
@@ -14378,7 +14638,7 @@ mod tests {
     #[tokio::test]
     async fn downloads_use_the_chosen_folder_and_fall_back_to_the_cache() {
         let (mut worker, _events, _, _) = receipt_tests::worker();
-        let root = std::env::temp_dir().join(format!("zapfast-downloads-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("wavo-downloads-{}", std::process::id()));
         let chosen = root.join("Downloads/WhatsApp");
         worker
             .handle_command(Command::SetDownloadFolder(Some(chosen.clone())))
@@ -14560,7 +14820,7 @@ mod tests {
 
     #[test]
     fn starting_over_keeps_the_old_archive_and_forgets_the_link() {
-        let root = std::env::temp_dir().join(format!("zapfast-start-over-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("wavo-start-over-{}", std::process::id()));
         let dirs = crate::paths::AppDirs::under(&root);
         dirs.ensure().unwrap();
         std::fs::write(dirs.archive_db(), b"encrypted").unwrap();
@@ -15283,6 +15543,7 @@ mod receipt_tests {
                 info_locked: false,
                 admin: false,
                 subject_generation: 0,
+                community: None,
             })
             .await;
         assert_eq!(
@@ -15310,6 +15571,7 @@ mod receipt_tests {
                 info_locked: false,
                 admin: false,
                 subject_generation: 0,
+                community: None,
             })
             .await;
         assert_eq!(
@@ -15344,6 +15606,7 @@ mod receipt_tests {
                 info_locked: false,
                 admin: false,
                 subject_generation: 0,
+                community: None,
             })
             .await;
         assert!(
@@ -15367,6 +15630,7 @@ mod receipt_tests {
                 info_locked: false,
                 admin: false,
                 subject_generation: 0,
+                community: None,
             })
             .await;
         assert!(
@@ -15426,6 +15690,7 @@ mod receipt_tests {
                 info_locked: true,
                 admin: true,
                 subject_generation: 0,
+                community: None,
             })
             .await;
         let row = worker.archive.chat(chat).unwrap().unwrap();
@@ -15942,6 +16207,7 @@ mod receipt_tests {
             info_locked: false,
             admin: false,
             subject_generation,
+            community: None,
         };
         worker
             .handle_command(Command::GroupEdited {
@@ -16310,7 +16576,7 @@ mod receipt_tests {
         assert_eq!(id, "allowed");
         assert_eq!(job.0, PEER);
         let errors = std::iter::from_fn(|| events.try_recv().ok())
-            .filter(|event| matches!(event, Event::Error(reason) if reason == "This conversation is read-only in ZapFast"))
+            .filter(|event| matches!(event, Event::Error(reason) if reason == "This conversation is read-only in WAVO"))
             .count();
         assert_eq!(errors, 1, "skipped jobs report one error per advance");
         assert_eq!(
@@ -16484,7 +16750,7 @@ mod receipt_tests {
         static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let root =
-            std::env::temp_dir().join(format!("zapfast-worker-test-{}-{n}", std::process::id()));
+            std::env::temp_dir().join(format!("wavo-worker-test-{}-{n}", std::process::id()));
         let worker = Worker {
             privacy_ready: true,
             privacy_confirmed: true,
@@ -18637,7 +18903,7 @@ mod receipt_tests {
         };
         worker.store_message(picture.clone(), None, None);
         let chat = PEER.to_owned();
-        let downloaded = std::path::PathBuf::from("/tmp/zapfast-photo.jpg");
+        let downloaded = std::path::PathBuf::from("/tmp/wavo-photo.jpg");
         worker
             .archive
             .set_media_path(&chat, "photo", &downloaded)
@@ -18971,7 +19237,7 @@ mod receipt_tests {
         let archived = |worker: &Worker| worker.archive.chat(PEER).unwrap().unwrap().archived;
         worker.store_message(incoming("before", 100), None, None);
         worker.archive.set_archived_at(PEER, true, 200_000).unwrap();
-        // Kept archived, the default, as ZapFast always behaved.
+        // Kept archived, the default, as WAVO always behaved.
         worker.store_message(incoming("kept", 300), None, None);
         assert!(archived(&worker));
 

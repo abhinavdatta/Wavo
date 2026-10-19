@@ -350,7 +350,7 @@ pub fn paint_avatar(
     ui: &Ui,
     palette: &Palette,
     rect: Rect,
-    name: &str,
+    _name: &str,
     id: &str,
     picture: Option<&Path>,
 ) {
@@ -373,15 +373,82 @@ pub fn paint_avatar(
         if crate::model::ChatKind::from_id(id) == crate::model::ChatKind::Group {
             theme::paint_icon(ui, Icon::Users, rect, size * 0.5, Color32::WHITE);
         } else {
-            ui.painter().text(
-                rect.center(),
-                egui::Align2::CENTER_CENTER,
-                crate::util::initials(name),
-                theme::semibold(size * 0.38),
-                Color32::WHITE,
-            );
+            paint_doodle_face(ui, rect, id);
         }
     }
+}
+
+/// A doodle portrait for a contact without a profile picture: a face with
+/// hair and skin tones drawn from `id`, inside a thin ring. Everything is
+/// painted locally, so nothing leaves the computer.
+fn paint_doodle_face(ui: &Ui, rect: Rect, id: &str) {
+    let seed = doodle_seed(id);
+    let hair = DOODLE_HAIR[(seed % 8) as usize % DOODLE_HAIR.len()];
+    let skin = DOODLE_SKIN[((seed / 8) % 4) as usize];
+    // Long hair falls past the chin; a bob stops at it.
+    let long_hair = seed % 16 < 8;
+    let center = rect.center();
+    // Tiny avatars (a badge, a full-screen one) keep the proportions, but a
+    // sub-pixel one paints nothing rather than a negative stroke.
+    let radius = (rect.width() / 2.0).max(0.5);
+    let ring_width = (radius * 0.07).max(1.0).min(radius * 0.15);
+    let painter = ui.painter();
+    // The white face card reaches almost to the ring, so only the thin
+    // ring shows around the portrait.
+    let card = radius * 0.90;
+    painter.circle_filled(center, card, Color32::WHITE);
+    painter.circle_stroke(
+        center,
+        (radius - ring_width / 2.0).max(0.0),
+        Stroke::new(ring_width, DOODLE_RING),
+    );
+    // Clip to the face card so long hair stops at its edge.
+    let clip = painter.clip_rect();
+    let bounds = Rect::from_center_size(center, Vec2::splat(card * 2.0));
+    let clipped = painter.with_clip_rect(clip.intersect(bounds));
+    // Hair behind the face: a large blob covering the top half, and for
+    // long hair two strands beside the face reaching down.
+    let head = radius * 0.44;
+    clipped.circle_filled(pos2(center.x, center.y - head * 0.3), head * 1.3, hair);
+    if long_hair {
+        let strand = head * 0.55;
+        for side in [-1.0, 1.0] {
+            let strand_center = pos2(center.x + side * head * 1.05, center.y + head * 0.6);
+            clipped.circle_filled(strand_center, strand, hair);
+        }
+    }
+    // The face under the fringe, then the fringe over the forehead.
+    let face = radius * 0.34;
+    clipped.circle_filled(pos2(center.x, center.y + face * 0.25), face, skin);
+    clipped.circle_filled(pos2(center.x, center.y - face * 1.05), face * 0.95, hair);
+}
+
+/// Colour mixes for the doodle faces, fixed so they read on any theme.
+const DOODLE_HAIR: [Color32; 6] = [
+    Color32::from_rgb(0x5d, 0x4a, 0x46), // dark brown
+    Color32::from_rgb(0xf8, 0xc5, 0x9a), // peach blonde
+    Color32::from_rgb(0xf2, 0xa5, 0x88), // ginger
+    Color32::from_rgb(0x2f, 0x28, 0x2b), // black
+    Color32::from_rgb(0xd9, 0x8c, 0x60), // auburn
+    Color32::from_rgb(0xec, 0xc4, 0x8b), // sandy blonde
+];
+const DOODLE_SKIN: [Color32; 4] = [
+    Color32::from_rgb(0xc5, 0x8a, 0x50), // tan
+    Color32::from_rgb(0xf2, 0xe3, 0xa9), // light
+    Color32::from_rgb(0xf3, 0xd6, 0xb8), // fair
+    Color32::from_rgb(0x9c, 0x66, 0x3d), // deep
+];
+const DOODLE_RING: Color32 = Color32::from_rgb(0x8a, 0x97, 0xa8);
+
+/// A stable 32-bit hash of an id. `hue` folds it to 360 values, too coarse to
+/// also pick hair length, so this keeps the full spread for the doodle faces.
+fn doodle_seed(id: &str) -> u32 {
+    let mut hash: u32 = 2_166_136_261;
+    for byte in id.bytes() {
+        hash ^= u32::from(byte);
+        hash = hash.wrapping_mul(16_777_619);
+    }
+    hash
 }
 
 pub fn paint_disappearing_badge(ui: &Ui, palette: &Palette, avatar: Rect) {
@@ -1235,9 +1302,9 @@ pub fn bubble_shape(
 /// The text size Messages lays its balloons out for on the Mac: ChatKit's
 /// `CKUIBehaviorMac.balloonTextFont` is the 13 pt system font.
 pub const MESSAGES_TEXT_SIZE: f32 = 13.0;
-/// The size of a message's text in ZapFast, every theme alike.
+/// The size of a message's text in WAVO, every theme alike.
 pub const MESSAGE_TEXT_SIZE: f32 = 14.5;
-/// How much larger than Messages' own a ZapFast balloon is drawn: its
+/// How much larger than Messages' own a WAVO balloon is drawn: its
 /// geometry keeps Apple's proportions to the text it holds.
 pub const MESSAGES_SCALE: f32 = MESSAGE_TEXT_SIZE / MESSAGES_TEXT_SIZE;
 
@@ -1348,7 +1415,7 @@ pub mod balloon {
     /// The tallest balloon still drawn as a single line. Messages picks the
     /// image by its line count: one line of its 13 pt text is 29.3 points
     /// high with the 7 point insets above and below it
-    /// (`CKUIBehaviorMac.textBalloonPillContentInsets`), two are 44.6; ZapFast
+    /// (`CKUIBehaviorMac.textBalloonPillContentInsets`), two are 44.6; WAVO
     /// splits the difference.
     pub const SINGLE_LINE_MAX: f32 = 37.0;
 }
@@ -2310,7 +2377,7 @@ mod tests {
 
     /// The balloon grows with the text it holds: at twice the scale, a body
     /// twice the size has a tail reaching twice as far and four times the
-    /// area. ZapFast's scale is its text size over Messages' 13 points.
+    /// area. WAVO's scale is its text size over Messages' 13 points.
     #[test]
     fn messages_balloons_scale_with_text_size() {
         assert_eq!(MESSAGES_SCALE, MESSAGE_TEXT_SIZE / MESSAGES_TEXT_SIZE);
@@ -2445,5 +2512,87 @@ mod tests {
         assert!(off_outline > 0.0, "the off track is outlined");
         assert_eq!(on_outline, 0.0, "the on track is filled, not outlined");
         assert!(on_knob > off_knob, "the knob grows when on");
+    }
+
+    /// The circles a pictureless avatar paints, with their fills.
+    fn doodle_circles(id: &str) -> Vec<(f32, Color32)> {
+        let ctx = egui::Context::default();
+        crate::theme::install(&ctx);
+        let palette = crate::theme::Palette::light();
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            paint_avatar(
+                ui,
+                &palette,
+                Rect::from_min_size(pos2(10.0, 10.0), Vec2::splat(64.0)),
+                "A Person",
+                id,
+                None,
+            );
+        });
+        output.textures_delta.clear();
+        output
+            .shapes
+            .iter()
+            .filter_map(|clipped| match &clipped.shape {
+                egui::Shape::Circle(circle) if circle.fill != Color32::TRANSPARENT => {
+                    Some((circle.radius, circle.fill))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// A pictureless person gets a doodle portrait, not initials: skin and
+    /// hair tones drawn from the id, always the same for it.
+    #[test]
+    fn a_pictureless_avatar_draws_a_doodle_face_from_the_id() {
+        for id in [
+            "15550001111@s.whatsapp.net",
+            "393331234567@s.whatsapp.net",
+            "120363012345678901@g.us-2",
+        ] {
+            let circles = doodle_circles(id);
+            // White face card, skin face, hair blob, fringe, ring.
+            assert!(
+                circles.iter().any(|(_, fill)| *fill == Color32::WHITE),
+                "{id}: a white face card"
+            );
+            assert!(
+                circles.iter().any(|(_, fill)| DOODLE_SKIN.contains(fill)),
+                "{id}: a skin face"
+            );
+            assert!(
+                circles.iter().any(|(_, fill)| DOODLE_HAIR.contains(fill)),
+                "{id}: hair"
+            );
+            // Nothing is written on it: no glyph shapes at all.
+            let ctx = egui::Context::default();
+            crate::theme::install(&ctx);
+            let palette = crate::theme::Palette::light();
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                paint_avatar(
+                    ui,
+                    &palette,
+                    Rect::from_min_size(pos2(10.0, 10.0), Vec2::splat(64.0)),
+                    "A Person",
+                    id,
+                    None,
+                );
+            });
+            output.textures_delta.clear();
+            assert!(
+                !output
+                    .shapes
+                    .iter()
+                    .any(|clipped| matches!(&clipped.shape, egui::Shape::Text(_))),
+                "{id}: no initials on a doodle face"
+            );
+            // Deterministic: the same id always paints the same circles.
+            assert_eq!(circles, doodle_circles(id), "{id}: stable across frames");
+        }
+        // Different ids can pick different palettes, not all one look.
+        let one = doodle_circles("a@s.whatsapp.net");
+        let two = doodle_circles("b@s.whatsapp.net");
+        assert_ne!(one, two, "distinct ids may draw distinct faces");
     }
 }

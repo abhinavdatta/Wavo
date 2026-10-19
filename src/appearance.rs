@@ -31,7 +31,7 @@ impl SystemAppearance {
         let scheme = Arc::new(AtomicU8::new(UNKNOWN));
         let shared = scheme.clone();
         let spawned = std::thread::Builder::new()
-            .name("zapfast-appearance".to_owned())
+            .name("wavo-appearance".to_owned())
             .spawn(move || {
                 if let Err(error) = watch(&shared, &wake) {
                     log::debug!("the desktop's colour scheme is unavailable: {error}");

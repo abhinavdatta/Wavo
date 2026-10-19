@@ -101,7 +101,7 @@ mod tests {
             pairing_phone: Some(phone.into()),
         };
 
-        // The previous Debug formatting leaked every field into zapfast.log.
+        // The previous Debug formatting leaked every field into wavo.log.
         let previous = format!("link: {status:?}");
         assert!(previous.contains(qr));
         assert!(previous.contains(code));
@@ -507,7 +507,7 @@ pub enum Command {
         complete: bool,
     },
     /// Internal: the one-time replay of the phone's contacts, for the first
-    /// names saved before ZapFast kept them, finished.
+    /// names saved before WAVO kept them, finished.
     FirstNamesRecovered {
         complete: bool,
     },
@@ -805,7 +805,7 @@ pub enum Command {
     /// Sets aside an unreadable archive and the linked session, then starts
     /// over with a new archive and a new link.
     StartOverArchive,
-    /// Whether the person is looking at ZapFast. While they are not, the
+    /// Whether the person is looking at WAVO. While they are not, the
     /// linked phone keeps receiving push notifications.
     SetOnline(bool),
     Shutdown,
@@ -914,6 +914,9 @@ pub enum Command {
         /// The chat's rename generation when this metadata was asked for. A
         /// snapshot older than a rename made here cannot restore the old name.
         subject_generation: u64,
+        /// The community parent group this chat belongs to; a parent group
+        /// points at itself.
+        community: Option<ChatId>,
     },
     /// Internal pairing-code result.
     PairCode {
@@ -945,6 +948,16 @@ pub enum Command {
     },
     /// Internal: followed channels and whether each is muted on the server.
     ChannelMutes(Vec<(String, bool)>),
+    /// Internal result of listing the account's groups as slim overviews:
+    /// id, subject, and the community hierarchy. Parents point at
+    /// themselves; subgroups carry their parent.
+    GroupOverviews(Vec<(ChatId, Option<String>, Option<ChatId>, bool)>),
+    /// Internal: reads one sender's image paths in the named chats for the
+    /// contact profile's media strip.
+    ContactMedia {
+        sender: ChatId,
+        chats: Vec<ChatId>,
+    },
     /// Internal: the pictures of followed channels, or `None` when the list
     /// could not be read.
     ChannelPictures(Option<Vec<(ChatId, ChannelPicture)>>),
@@ -1004,6 +1017,11 @@ pub enum Event {
     },
     /// Full chat list, newest first.
     Chats(Vec<Chat>),
+    /// One sender's media in the named chats, for the contact profile.
+    ContactMedia {
+        sender: ChatId,
+        media: Vec<(ChatId, String, std::path::PathBuf)>,
+    },
     /// Every label in creation order. Chats carry the labels they wear.
     Labels(Vec<crate::model::Label>),
     /// Unsent text stored for each chat, sent once at startup.
@@ -1370,14 +1388,14 @@ impl Backend {
         let (event_tx, event_rx) = std::sync::mpsc::channel();
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
-            .thread_name("zapfast-runtime")
+            .thread_name("wavo-runtime")
             .enable_all()
             .build()
             .expect("unable to start the async runtime");
         let worker_commands = command_tx.clone();
         let (startup, started) = tokio::sync::oneshot::channel();
         let thread = std::thread::Builder::new()
-            .name("zapfast-backend".to_string())
+            .name("wavo-backend".to_string())
             .spawn(move || {
                 runtime.block_on(async move {
                     if started.await.is_ok() {

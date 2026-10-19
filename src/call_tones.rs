@@ -1,7 +1,7 @@
 //! The tones a call makes on this side: the ringback heard while the peer's phone rings, and the
 //! ringtone of an incoming call.
 //!
-//! Both are synthesised here rather than bundled. Pidgin, whose message sounds ZapFast plays,
+//! Both are synthesised here rather than bundled. Pidgin, whose message sounds WAVO plays,
 //! ships no call or ring sound (its `share/sounds/` holds only alert, login, logout, receive and
 //! send), and a tone made in code needs no licence note of its own.
 //!

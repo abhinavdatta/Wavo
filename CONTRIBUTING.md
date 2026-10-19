@@ -1,6 +1,6 @@
-# Contributing to ZapFast
+# Contributing to WAVO
 
-ZapFast is a small native WhatsApp client. Changes should improve the desktop
+WAVO is a small native WhatsApp client. Changes should improve the desktop
 app without adding a browser engine, telemetry, a hosted backend, or another
 protocol implementation.
 
@@ -19,11 +19,11 @@ Product boundaries and upstream responsibilities:
 - The protocol comes from [whatsapp-rust](https://github.com/oxidezap/whatsapp-rust).
   A capability it does not support is fixed upstream first, not reimplemented
   here.
-- ZapFast will not embed a browser engine, add telemetry, or introduce a
-  ZapFast-operated service. Features that send message content to a third
+- WAVO will not embed a browser engine, add telemetry, or introduce a
+  WAVO-operated service. Features that send message content to a third
   party are out of scope.
 
-The guide's [current limitations](https://zapfast.rocks/what-is-zapfast/#what-it-does-not-do-yet)
+The guide's [current limitations](https://wavo.rocks/what-is-wavo/#what-it-does-not-do-yet)
 describe what is implemented today, not permanent exclusions. Missing features,
 codec restrictions, and download limits do not by themselves make a report out
 of scope. Check the relevant code and reported version when a guide and a
@@ -65,7 +65,7 @@ release status stated. Reopen the issue if it persists after updating.
 
 Keep each pull request to one change. A pull request that bundles unrelated
 fixes or features will be closed with a request to split it. Explain why the
-change belongs in ZapFast, what changed, and how you tested it. Avoid unrelated
+change belongs in WAVO, what changed, and how you tested it. Avoid unrelated
 formatting, refactors, generated prose, and large mechanical rewrites.
 
 `main` has a linear history. Outside pull requests are squash-merged into one
@@ -118,7 +118,7 @@ call so extraction can find it. Normal Cargo builds compile the catalogs without
 gettext tools.
 
 Linux needs the development packages listed in
-[Getting started](https://zapfast.rocks/getting-started/); `nix develop`
+[Getting started](https://wavo.rocks/getting-started/); `nix develop`
 provides the complete development environment. When changing `Cargo.lock` or
 `flake.nix`, also verify `nix build` on a Nix host or wait for the Nix CI job.
 Passing CI is required, but does not replace review for correctness, product

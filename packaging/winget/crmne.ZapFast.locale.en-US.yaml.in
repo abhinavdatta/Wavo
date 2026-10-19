@@ -1,34 +1,34 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.12.0.schema.json
 
-PackageIdentifier: crmne.ZapFast
+PackageIdentifier: crmne.WAVO
 PackageVersion: @VERSION@
 PackageLocale: en-US
 Publisher: Carmine Paolino
 PublisherUrl: https://paolino.me/
-PublisherSupportUrl: https://github.com/crmne/zapfast/issues
+PublisherSupportUrl: https://github.com/crmne/wavo/issues
 Author: Carmine Paolino
-PackageName: ZapFast
-PackageUrl: https://zapfast.rocks/
+PackageName: WAVO
+PackageUrl: https://wavo.rocks/
 License: MIT
-LicenseUrl: https://github.com/crmne/zapfast/blob/v@VERSION@/LICENSE
+LicenseUrl: https://github.com/crmne/wavo/blob/v@VERSION@/LICENSE
 Copyright: Copyright (c) 2026 Carmine Paolino
 ShortDescription: A fast, lightweight, native WhatsApp client
 Description: |-
-  ZapFast is a small, fast WhatsApp client with no browser engine. It links to your phone as a companion device and keeps your chats in an encrypted archive on your computer. It sends and receives messages, photos, videos, voice messages, stickers and polls, holds several WhatsApp numbers in one window, and takes custom colour themes.
-  ZapFast was previously called FastsApp. It is not affiliated with WhatsApp or Meta.
+  WAVO is a small, fast WhatsApp client with no browser engine. It links to your phone as a companion device and keeps your chats in an encrypted archive on your computer. It sends and receives messages, photos, videos, voice messages, stickers and polls, holds several WhatsApp numbers in one window, and takes custom colour themes.
+  WAVO was previously called FastsApp. It is not affiliated with WhatsApp or Meta.
   It needs a graphics driver with OpenGL 2.1 or newer.
-Moniker: zapfast
+Moniker: wavo
 Tags:
 - chat
 - messaging
 - messenger
 - whatsapp
 - whatsapp-client
-ReleaseNotesUrl: https://github.com/crmne/zapfast/releases/tag/v@VERSION@
+ReleaseNotesUrl: https://github.com/crmne/wavo/releases/tag/v@VERSION@
 Documentations:
 - DocumentLabel: Getting Started
-  DocumentUrl: https://zapfast.rocks/getting-started/
+  DocumentUrl: https://wavo.rocks/getting-started/
 - DocumentLabel: Settings and Files
-  DocumentUrl: https://zapfast.rocks/settings-and-files/
+  DocumentUrl: https://wavo.rocks/settings-and-files/
 ManifestType: defaultLocale
 ManifestVersion: 1.12.0

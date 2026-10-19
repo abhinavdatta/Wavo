@@ -111,7 +111,7 @@ mod platform {
             // The backdrop shows only where the frame extends over the
             // client area; all of it, while wanted. The custom title bar
             // leaves the frame alone: without decorations the window has no
-            // caption for DWM to draw, and the buttons ZapFast draws sit in
+            // caption for DWM to draw, and the buttons WAVO draws sit in
             // the client area over the same Mica.
             let inset = if wanted { -1 } else { 0 };
             let margins = MARGINS {
@@ -138,7 +138,7 @@ mod platform {
     /// Translucent only where the compositor is known to blur what shows
     /// through: Hyprland blurs translucent windows unless told not to. Other
     /// Wayland compositors blur only windows that ask (KDE's blur protocol,
-    /// which ZapFast does not speak yet) or not at all (GNOME), and an
+    /// which WAVO does not speak yet) or not at all (GNOME), and an
     /// unblurred desktop behind the sidebar would cost its text contrast; X11
     /// may lack a compositor entirely. All of them keep the opaque window.
     pub fn apply(frame: &eframe::Frame, _palette: &crate::theme::Palette, wanted: bool) -> bool {

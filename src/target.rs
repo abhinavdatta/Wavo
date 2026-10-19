@@ -1,6 +1,6 @@
 //! The chat a launch argument names, and the text it asks to start with.
 //!
-//! ZapFast is asked to open a chat by a number on its own, a `wa.me` link, or
+//! WAVO is asked to open a chat by a number on its own, a `wa.me` link, or
 //! the `whatsapp://send?phone=` URI the desktop entry registers. All three
 //! name the same chat, filed under the number's JID, and any of them may
 //! carry a `text=` template to start the conversation with.

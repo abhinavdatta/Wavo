@@ -1,4 +1,4 @@
-//! Where ZapFast keeps its files.
+//! Where WAVO keeps its files.
 //!
 //! Configuration, session state, and caches use separate standard platform
 //! directories. Clearing a cache does not remove device keys.
@@ -8,6 +8,22 @@ use std::path::{Path, PathBuf};
 use directories::ProjectDirs;
 
 use crate::model::AccountId;
+
+/// Earlier names and organisations of this app, newest first, whose folders
+/// and keyring identities are adopted at startup.
+const PREVIOUS_NAMES: [(&str, &str, &str); 11] = [
+    ("me", "paolino", "wavo"),
+    ("", "paolino", "wavo"),
+    ("me", "paolino", "wavo"),
+    ("", "paolino", "wavo"),
+    ("me", "paolino", "fastsapp"),
+    ("", "paolino", "fastsapp"),
+    ("me", "paolino", "fastwhatsapp"),
+    ("", "paolino", "fastwhatsapp"),
+    ("", "", "wavo"),
+    ("", "", "fastsapp"),
+    ("", "", "fastwhatsapp"),
+];
 
 #[derive(Clone, Debug)]
 pub struct AppDirs {
@@ -20,15 +36,15 @@ pub struct AppDirs {
 
 impl AppDirs {
     pub fn discover() -> Self {
-        match Self::of("zapfast") {
+        match Self::of("wavo") {
             Some(dirs) => dirs,
             None => {
                 let fallback = std::env::current_dir().unwrap_or_default();
                 Self {
-                    config: fallback.join("zapfast-config"),
-                    state: fallback.join("zapfast-state"),
-                    cache: fallback.join("zapfast-cache"),
-                    runtime: fallback.join("zapfast-run"),
+                    config: fallback.join("wavo-config"),
+                    state: fallback.join("wavo-state"),
+                    cache: fallback.join("wavo-cache"),
+                    runtime: fallback.join("wavo-run"),
                 }
             }
         }
@@ -36,7 +52,12 @@ impl AppDirs {
 
     /// Standard platform directories for the app.
     fn of(name: &str) -> Option<Self> {
-        let project = ProjectDirs::from("me", "paolino", name)?;
+        Self::of_org("", "", name)
+    }
+
+    /// Standard platform directories for an earlier name of the app.
+    fn of_org(qualifier: &str, organization: &str, name: &str) -> Option<Self> {
+        let project = ProjectDirs::from(qualifier, organization, name)?;
         let state = project
             .state_dir()
             .map(|path| path.to_path_buf())
@@ -49,15 +70,17 @@ impl AppDirs {
         })
     }
 
-    /// Adopts earlier names, newest first, without replacing existing data.
-    /// Call only after acquiring the instance guard, and never for demo runs.
+    /// Adopts earlier names, newest first, without replacing existing data:
+    /// the rebrand's first organisation, then the fork's own previous folder,
+    /// then WAVO's and FastsApp's, so a linked device survives the rename.
+    /// Each name is tried with the fork's earlier qualifier too. Call only
+    /// after acquiring the instance guard, and never for demo runs.
     pub fn adopt_previous_names(&self) -> std::io::Result<()> {
-        for name in ["fastsapp", "fastwhatsapp"] {
-            if let Some(old) = Self::of(name) {
+        for (qualifier, organization, name) in PREVIOUS_NAMES {
+            if let Some(old) = Self::of_org(qualifier, organization, name) {
                 self.adopt(&old)?;
             }
-            if let (Some(from), Some(to)) =
-                (eframe::storage_dir(name), eframe::storage_dir("zapfast"))
+            if let (Some(from), Some(to)) = (eframe::storage_dir(name), eframe::storage_dir("wavo"))
             {
                 adopt_directory(&from, &to)?;
             }
@@ -66,6 +89,14 @@ impl AppDirs {
     }
 
     fn adopt(&self, old: &Self) -> std::io::Result<()> {
+        // The archive key may live under the fork's earlier keyring service,
+        // filed under the identity of a folder that renames have left behind.
+        // It moves into the new service and the new tree before the folders
+        // do, because the keyring cannot be asked about a folder that no
+        // longer exists.
+        if old.state.join("archive.db").exists() {
+            self.adopt_archive_key(old)?;
+        }
         for (from, to) in [
             (&old.config, &self.config),
             (&old.state, &self.state),
@@ -74,6 +105,25 @@ impl AppDirs {
             adopt_directory(from, to)?;
         }
         Ok(())
+    }
+
+    fn adopt_archive_key(&self, old: &Self) -> std::io::Result<()> {
+        let mut legacy_parents = Vec::new();
+        // The key was filed under the folder the archive lived in at the
+        // time: every earlier name's state folder, and the account folder
+        // inside it, are all worth asking.
+        for (qualifier, organization, name) in PREVIOUS_NAMES {
+            if let Some(dirs) = Self::of_org(qualifier, organization, name) {
+                legacy_parents.push(dirs.state.clone());
+                legacy_parents.push(
+                    dirs.state
+                        .join("accounts")
+                        .join(AccountId::first().as_str()),
+                );
+            }
+        }
+        crate::archive::migrate_legacy_key(&old.state, &self.state, &legacy_parents)
+            .map_err(|error| std::io::Error::other(format!("{error:#}")))
     }
 
     /// Places all data under one directory for tests and temporary runs.
@@ -192,7 +242,7 @@ impl AppDirs {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::AlreadyExists,
                 format!(
-                    "{} holds a single-account setup, but {} already exists. Nothing was moved; move one of them away and start ZapFast again",
+                    "{} holds a single-account setup, but {} already exists. Nothing was moved; move one of them away and start WAVO again",
                     self.state.display(),
                     blocked[0].display()
                 ),
@@ -230,7 +280,7 @@ impl AppDirs {
 
     /// Current-run log, replaced at startup.
     pub fn log_file(&self) -> PathBuf {
-        self.state.join("zapfast.log")
+        self.state.join("wavo.log")
     }
 
     /// Panic log written before process exit.
@@ -258,7 +308,7 @@ impl AppDirs {
         self.state.join("stickers")
     }
 
-    /// ZapFast's copy of the chosen chat wallpaper image. User data, so it
+    /// WAVO's copy of the chosen chat wallpaper image. User data, so it
     /// sits beside saved stickers rather than in the cache.
     pub fn wallpaper_file(&self, extension: &str) -> PathBuf {
         self.state.join(format!("wallpaper.{extension}"))
@@ -344,7 +394,7 @@ impl AccountDirs {
         self.state.join("stickers")
     }
 
-    /// ZapFast's copy of the chosen chat wallpaper image for this account.
+    /// WAVO's copy of the chosen chat wallpaper image for this account.
     pub fn wallpaper_file(&self, extension: &str) -> PathBuf {
         self.state.join(format!("wallpaper.{extension}"))
     }
@@ -420,8 +470,7 @@ mod tests {
     use super::*;
 
     fn root(name: &str) -> PathBuf {
-        let root =
-            std::env::temp_dir().join(format!("zapfast-paths-{name}-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("wavo-paths-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         root
@@ -480,10 +529,10 @@ mod tests {
 
     #[test]
     fn rename_preserves_session_archive_settings_and_cached_files() {
-        for name in ["fastsapp", "fastwhatsapp"] {
+        for name in ["fastwhatsapp", "fastsapp", "wavo"] {
             let root = root(name);
             let old = AppDirs::under(&root.join(name));
-            let new = AppDirs::under(&root.join("zapfast"));
+            let new = AppDirs::under(&root.join("wavo"));
             old.ensure().unwrap();
             for path in [
                 old.settings_file(),
@@ -520,7 +569,7 @@ mod tests {
     #[test]
     fn newest_data_wins_without_merging_archives() {
         let root = root("precedence");
-        let new = AppDirs::under(&root.join("zapfast"));
+        let new = AppDirs::under(&root.join("wavo"));
         let recent = AppDirs::under(&root.join("fastsapp"));
         let oldest = AppDirs::under(&root.join("fastwhatsapp"));
         recent.ensure().unwrap();

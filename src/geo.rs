@@ -1,6 +1,6 @@
 //! Reading a location out of the text a reader pastes.
 //!
-//! A computer has no position of its own to offer and ZapFast asks no service
+//! A computer has no position of its own to offer and WAVO asks no service
 //! for one, so the location dialog takes the spot as text: a pair of
 //! coordinates, or a link to a spot on a map. Everything here is offline
 //! parsing, and anything it cannot read with confidence it refuses, so the
@@ -41,7 +41,7 @@ pub fn spot(text: &str) -> Option<Spot> {
 }
 
 /// The link to open for a spot, the one the location card offers too. The
-/// browser fetches it, never ZapFast, so no map is ever loaded in the app.
+/// browser fetches it, never WAVO, so no map is ever loaded in the app.
 pub fn map_url(spot: Spot) -> String {
     let (latitude, longitude) = (spot.latitude, spot.longitude);
     format!(
@@ -51,7 +51,7 @@ pub fn map_url(spot: Spot) -> String {
 
 /// Whether `text` is a shortened map link, which names its spot only on the
 /// server it redirects through. Following it would mean asking that server,
-/// and ZapFast never does, so the dialog asks for the full link instead.
+/// and WAVO never does, so the dialog asks for the full link instead.
 pub fn is_short_link(text: &str) -> bool {
     let Ok(url) = reqwest::Url::parse(text.trim()) else {
         return false;

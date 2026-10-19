@@ -1,4 +1,4 @@
-//! Starting ZapFast in the tray when the person logs in, through
+//! Starting WAVO in the tray when the person logs in, through
 //! fastframe-autostart.
 //!
 //! The platform's own login-item record is the only state: Settings reads it
@@ -11,7 +11,7 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 use fastframe_autostart::{Autostart, Start, State};
 
 fn autostart() -> Autostart {
-    Autostart::new("zapfast", "ZapFast")
+    Autostart::new("wavo", "WAVO")
 }
 
 /// What a finished read or change found.
@@ -46,7 +46,7 @@ impl LoginItem {
         );
     }
 
-    /// Starts ZapFast in the tray at login, or not at all.
+    /// Starts WAVO in the tray at login, or not at all.
     pub fn set(&mut self, enabled: bool, wake: impl Fn() + Send + 'static) {
         self.spawn(
             move || Outcome {
@@ -103,7 +103,7 @@ pub fn switch(state: State) -> Option<bool> {
     }
 }
 
-/// ZapFast 0.19 and earlier wrote their own LaunchAgent. Registers the bundled
+/// WAVO 0.19 and earlier wrote their own LaunchAgent. Registers the bundled
 /// agent in its place and deletes the old file, once; a copy that cannot
 /// register (one run outside its bundle) leaves the file as it is.
 #[cfg(target_os = "macos")]
@@ -111,7 +111,7 @@ fn move_launch_agent() {
     let Some(home) = std::env::var_os("HOME") else {
         return;
     };
-    let old = std::path::Path::new(&home).join("Library/LaunchAgents/me.paolino.zapfast.plist");
+    let old = std::path::Path::new(&home).join("Library/LaunchAgents/me.paolino.wavo.plist");
     if !old.is_file() {
         return;
     }
@@ -130,7 +130,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_switch_shows_only_where_zapfast_can_start_at_login() {
+    fn the_switch_shows_only_where_wavo_can_start_at_login() {
         assert_eq!(switch(State::Unsupported), None);
         assert_eq!(switch(State::Off), Some(false));
         assert_eq!(switch(State::On(Start::Hidden)), Some(true));

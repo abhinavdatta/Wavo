@@ -68,7 +68,7 @@ fn app_state_summary(message: &str) -> Option<Cow<'static, str>> {
 /// [`crate::transport`] put in the error chain (`Failed to connect: {err:#}`).
 ///
 /// A fresh install must first fetch the WhatsApp Web version, so a device that
-/// cannot reach web.whatsapp.com stays at "Connecting" (crmne/zapfast#271).
+/// cannot reach web.whatsapp.com stays at "Connecting" (crmne/wavo#271).
 fn connect_summary(lower: &str) -> Option<Cow<'static, str>> {
     if lower.contains("version fetch timed out") {
         return Some("timed out fetching the WhatsApp Web version".into());
@@ -218,7 +218,7 @@ mod tests {
         assert!(is_protocol_target("wacore::appstate"));
         assert!(is_protocol_target("wacore_noise::handshake"));
         assert!(is_protocol_target("whatsapp_rust_sqlite_storage::store"));
-        assert!(!is_protocol_target("zapfast::backend::worker"));
+        assert!(!is_protocol_target("wavo::backend::worker"));
     }
 
     #[test]

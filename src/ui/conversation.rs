@@ -38,13 +38,13 @@ const MESSAGES_WIDTH_SHARE: f32 = 0.65;
 const WHATSAPP_WIDTH_SHARE: f32 = 0.72;
 /// The transcript's side margin in the Messages style: Messages' 11 points
 /// (`CKUIBehaviorMac.minTranscriptMarginInsets`) plus the 5 points beside
-/// each balloon's body that its tail curls into, at ZapFast's text size.
+/// each balloon's body that its tail curls into, at WAVO's text size.
 const MESSAGES_SIDE_MARGIN: i8 = 17;
 /// The transcript's side margin in WhatsApp's style.
 const WHATSAPP_SIDE_MARGIN: i8 = 18;
 /// Room around a Messages bubble's contents: Messages' 12 points beside its
 /// text and 7 above and below (`CKUIBehaviorMac.textBalloonPillContentInsets`)
-/// at ZapFast's text size, 13.4 and 7.8, rounded.
+/// at WAVO's text size, 13.4 and 7.8, rounded.
 const MESSAGES_BUBBLE_MARGIN: Margin = Margin {
     left: 13,
     right: 13,
@@ -57,7 +57,7 @@ const SELECT_GUTTER: f32 = SELECT_BOX + 14.0;
 /// Footer label on an outgoing message that failed to send.
 const NOT_SENT: &str = "Not sent";
 const NOT_SENT_HINT: &str =
-    "This message could not be sent, and ZapFast will not retry it. Send it again yourself.";
+    "This message could not be sent, and WAVO will not retry it. Send it again yourself.";
 
 pub fn show(app: &mut App, ui: &mut egui::Ui) {
     let Some(chat) = app.current_chat().cloned() else {
@@ -285,7 +285,7 @@ fn empty(app: &mut App, ui: &mut egui::Ui) {
     ui.painter().text(
         center,
         Align2::CENTER_CENTER,
-        "ZapFast",
+        "WAVO",
         theme::bold(24.0),
         palette.text,
     );
@@ -364,7 +364,7 @@ const NAME_GLASS_LINES: f32 = 32.0;
 const BUTTON_GLASS: f32 = 36.0;
 /// The space between two of a vibrant header's buttons, beyond their glass.
 const BUTTON_GAP: f32 = 10.0;
-/// What the chat header needs beside the caption buttons ZapFast draws: its
+/// What the chat header needs beside the caption buttons WAVO draws: its
 /// most buttons (Back, two calls, Search and More), the avatar, and a name.
 const HEADER_MIN_CONTENT: f32 = 320.0;
 
@@ -413,7 +413,7 @@ fn header(app: &mut App, ui: &mut egui::Ui, chat: &Chat) -> Rect {
             if theme::chrome_in_headers(ui.ctx()) {
                 super::titlebar_drag(ui, ui.max_rect());
             }
-            // The caption buttons ZapFast draws over a corner the header
+            // The caption buttons WAVO draws over a corner the header
             // reaches: beside its own buttons, or above them when narrow.
             let room = super::caption_room(ui.ctx(), ui.max_rect(), HEADER_MIN_CONTENT);
             ui.add_space(room.top);
@@ -1355,7 +1355,7 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                             } else {
                                 crate::i18n::gettext(
                                     app.locale,
-                                    "Channels are read-only in ZapFast",
+                                    "Channels are read-only in WAVO",
                                 )
                             }
                             .as_ref(),
@@ -1367,7 +1367,7 @@ fn composer(app: &mut App, ui: &mut egui::Ui, chat: &Chat) {
                 }
                 if chat.locked {
                     ui.vertical_centered(|ui| {
-                        theme::text(ui, "Locked chats are read-only in ZapFast", theme::regular(13.5), palette.secondary);
+                        theme::text(ui, "Locked chats are read-only in WAVO", theme::regular(13.5), palette.secondary);
                     });
                     return;
                 }
@@ -3963,7 +3963,7 @@ impl SelectionLeash {
 
 impl egui::plugin::Plugin for SelectionLeash {
     fn debug_name(&self) -> &'static str {
-        "zapfast-selection-leash"
+        "wavo-selection-leash"
     }
 
     fn input_hook(&mut self, ctx: &egui::Context, input: &mut egui::RawInput) {
@@ -5930,6 +5930,13 @@ fn context_menu(
     if let Some(media) = message.content.media() {
         match &media.path {
             Some(path) => {
+                let editable_picture = matches!(message.content, Content::Image { .. })
+                    && crate::safety::can_preview_image(path);
+                if editable_picture
+                    && widgets::menu_item(ui, &palette, Some(Icon::Pencil), "Edit photo")
+                {
+                    actions.push(Action::OpenImageEditor(path.clone()));
+                }
                 let open = if matches!(message.content, Content::Video { gif: false, .. }) {
                     crate::i18n::gettext(view.locale, "Open in system player")
                 } else {
@@ -8424,7 +8431,7 @@ fn video(
 ) -> f32 {
     use crate::video::State;
     let palette = view.palette;
-    // A video sent before ZapFast made thumbnails has none; its file is
+    // A video sent before WAVO made thumbnails has none; its file is
     // here, so its first frame stands in. Without either, it is a file card.
     let thumbnail = message.thumbnail.as_deref();
     if thumbnail.is_none() && media.path.is_none() {
@@ -9135,7 +9142,13 @@ fn attachment(
         .on_hover_cursor(egui::CursorIcon::PointingHand);
     if response.clicked() && !auto {
         match &media.path {
-            Some(path) => actions.push(Action::OpenFile(path.clone())),
+            Some(path) => {
+                if icon == Icon::FileText && is_pdf_name(path, title) {
+                    actions.push(Action::PreviewPdf(path.clone()));
+                } else {
+                    actions.push(Action::OpenFile(path.clone()));
+                }
+            }
             None if !matches!(media.state, MediaState::Downloading) => {
                 actions.push(Action::Download {
                     manual: true,

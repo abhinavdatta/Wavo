@@ -1,0 +1,18 @@
+[Desktop Entry]
+Type=Application
+Name=WAVO
+GenericName=WhatsApp Client
+Comment=A native WhatsApp client
+Exec=wavo %U
+Icon=wavo
+Terminal=false
+Categories=Network;InstantMessaging;Chat;
+Keywords=whatsapp;chat;messaging;
+StartupWMClass=wavo
+MimeType=x-scheme-handler/whatsapp;x-scheme-handler/wa;
+SingleMainWindow=true
+Actions=quit;
+
+[Desktop Action quit]
+Name=Quit WAVO
+Exec=wavo quit

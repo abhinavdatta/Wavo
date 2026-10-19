@@ -13,7 +13,9 @@ mod calls;
 pub use calls::CALL_LOG_LIMIT;
 mod drafts;
 mod encryption;
-pub use encryption::{archive_key_identity, copy_archive_key, forget_archive_key};
+pub use encryption::{
+    archive_key_identity, copy_archive_key, forget_archive_key, migrate_legacy_key,
+};
 mod favorites;
 pub use favorites::Favorite;
 mod labels;
@@ -170,7 +172,7 @@ const CHAT_COLUMNS: &str =
                     c.pinned_at, c.ephemeral_expiration, c.locked, c.group_subject_known,
                     c.notification_sound, c.marked_unread,
                     (SELECT f.position FROM favorites f WHERE f.chat = c.id), c.left,
-                    c.info_locked, c.group_admin, c.group_description";
+                    c.info_locked, c.group_admin, c.group_description, c.community";
 
 /// Adds columns introduced after the initial schema when missing.
 const MIGRATIONS: &[(&str, &str, &str)] = &[
@@ -214,6 +216,9 @@ const MIGRATIONS: &[(&str, &str, &str)] = &[
     ("chats", "group_description", "TEXT"),
     // Set once the phone says it holds nothing older than what it sent.
     ("chats", "history_start", "INTEGER NOT NULL DEFAULT 0"),
+    // The community parent group this chat belongs to, when it is part of
+    // one; the parent points at itself.
+    ("chats", "community", "TEXT"),
     ("contacts", "first_name", "TEXT"),
 ];
 const CHAT_JOIN: &str = "FROM chats c
@@ -271,6 +276,7 @@ fn chat_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Chat> {
         info_locked: row.get(23)?,
         admin: row.get(24)?,
         group_description: row.get(25)?,
+        community: row.get(26)?,
     })
 }
 
@@ -527,6 +533,15 @@ impl Archive {
         self.connection.execute(
             "UPDATE chats SET info_locked = ?2, group_admin = ?3 WHERE id = ?1",
             params![id, info_locked, admin],
+        )?;
+        Ok(())
+    }
+
+    /// Records the community a group belongs to. `None` clears a stale link.
+    pub fn set_community(&self, id: &str, community: Option<&str>) -> Result<()> {
+        self.connection.execute(
+            "UPDATE chats SET community = ?2 WHERE id = ?1",
+            params![id, community],
         )?;
         Ok(())
     }
@@ -887,7 +902,7 @@ impl Archive {
     pub fn unread_incoming(&self, chat: &str, limit: u32) -> Result<Vec<(String, String)>> {
         let mut statement = self.connection.prepare(
             "SELECT id, sender FROM messages WHERE chat = ?1 AND from_me = 0
-             AND id NOT LIKE 'zapfast-call-%'
+             AND id NOT LIKE 'wavo-call-%'
              AND timestamp >= COALESCE((SELECT read_through FROM chats WHERE id = ?1), -1)
              ORDER BY timestamp DESC, COALESCE(history_order, 9223372036854775807) DESC, rowid DESC LIMIT ?2",
         )?;
@@ -1443,7 +1458,8 @@ impl Archive {
         let sql = format!(
             "SELECT {SEARCH_COLUMNS}
              FROM messages
-             WHERE json_valid(content) AND {SEARCHED_TEXT} LIKE ?1 ESCAPE '\\'
+             WHERE chat != 'status@broadcast'
+               AND json_valid(content) AND {SEARCHED_TEXT} LIKE ?1 ESCAPE '\\'
              ORDER BY timestamp DESC, COALESCE(history_order, 9223372036854775807) DESC, rowid DESC
              LIMIT ?2"
         );
@@ -2036,6 +2052,46 @@ impl Archive {
     /// Attachment paths of one chat.
     fn chat_media(&self, chat: &str) -> Result<Vec<PathBuf>> {
         self.cached_media("m.chat = ?1", params![chat])
+    }
+
+    /// Media ids and paths a contact posted in the shared chats, newest
+    /// first: images, cards, and carousel cards carrying a path. Locked
+    /// chats stay out, like the conversation itself does.
+    pub fn contact_media(
+        &self,
+        sender: &str,
+        shared: &[String],
+    ) -> Result<Vec<(String, String, PathBuf)>> {
+        let marks: Vec<String> = shared.iter().map(|_| "?".to_owned()).collect();
+        let marks = marks.join(",");
+        let mut statement = self.connection.prepare(&format!(
+            "SELECT m.chat, m.id, coalesce(json_extract(m.content, '$.media.path'),
+                 json_extract(m.content, '$.card.image.path')) AS path
+             FROM messages m
+             WHERE m.from_me = 0 AND m.sender = ?1 AND path IS NOT NULL
+               AND m.chat IN ({marks})
+               AND m.chat NOT IN (SELECT id FROM chats WHERE locked = 1)
+             UNION ALL
+             SELECT m.chat, m.id, json_extract(c.value, '$.image.path')
+             FROM messages m, json_each(m.content, '$.card.carousel') c
+             WHERE m.from_me = 0 AND m.sender = ?1 AND json_extract(c.value, '$.image.path') IS NOT NULL
+               AND m.chat IN ({marks})
+               AND m.chat NOT IN (SELECT id FROM chats WHERE locked = 1)"
+        ))?;
+        let ids: Vec<&str> = shared.iter().map(String::as_str).collect();
+        let params = rusqlite::params_from_iter(
+            std::iter::once(sender)
+                .chain(ids.iter().copied())
+                .chain(ids.iter().copied()),
+        );
+        let rows = statement.query_map(params, |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                PathBuf::from(row.get::<_, String>(2)?),
+            ))
+        })?;
+        rows.collect()
     }
 
     /// Attachment paths of the messages matching `filter` (over `messages m`),
@@ -3816,7 +3872,7 @@ pub(crate) mod tests {
     #[test]
     fn deleting_a_chat_removes_it_with_its_messages_and_reports_its_media() {
         let archive = Archive::in_memory().expect("opens");
-        let media = PathBuf::from("/cache/zapfast/media/m2.jpg");
+        let media = PathBuf::from("/cache/wavo/media/m2.jpg");
         let gone = furnished_chat(&archive, "1@s.whatsapp.net", &media);
         let kept = furnished_chat(&archive, "2@s.whatsapp.net", &media);
 
@@ -3927,7 +3983,7 @@ pub(crate) mod tests {
             width: None,
             height: None,
             album: None,
-            path: Some(PathBuf::from(format!("/cache/zapfast/media/{name}.jpg"))),
+            path: Some(PathBuf::from(format!("/cache/wavo/media/{name}.jpg"))),
             state: Default::default(),
         };
         let card = |image: crate::model::Media| crate::model::InteractiveCard {
@@ -3981,7 +4037,7 @@ pub(crate) mod tests {
     #[test]
     fn clearing_a_chat_keeps_it_but_empties_its_messages_and_unread_count() {
         let archive = Archive::in_memory().expect("opens");
-        let media = PathBuf::from("/cache/zapfast/media/m2.jpg");
+        let media = PathBuf::from("/cache/wavo/media/m2.jpg");
         let chat = furnished_chat(&archive, "1@s.whatsapp.net", &media);
 
         let removed = archive.clear_chat(&chat).expect("clear");
@@ -4932,7 +4988,7 @@ pub(crate) mod tests {
 
     #[test]
     fn read_positions_and_pending_sync_survive_reopening_the_archive() {
-        let dir = std::env::temp_dir().join(format!("zapfast-read-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("wavo-read-test-{}", std::process::id()));
         let path = dir.join("archive.db");
         let _ = std::fs::remove_dir_all(&dir);
         let chat = "1@s.whatsapp.net";

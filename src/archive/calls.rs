@@ -1,6 +1,6 @@
 //! Call entries: the calls of a chat as messages of their own kind, which is
 //! how WhatsApp files them too. They come from the phone's call-log messages
-//! in history and from the call records ZapFast files (the phone's call log
+//! in history and from the call records WAVO files (the phone's call log
 //! and the calls it took part in, under ids that start with
 //! [`crate::model::CALL_ENTRY_PREFIX`]).
 
@@ -31,7 +31,7 @@ impl Archive {
         )
     }
 
-    /// ZapFast's own entries for a call the phone has now filed itself: the
+    /// WAVO's own entries for a call the phone has now filed itself: the
     /// same side's local entries around `timestamp`.
     pub fn local_call_twins(
         &self,
@@ -144,10 +144,10 @@ mod tests {
         archive.ensure_chat(ada, "Ada").unwrap();
         archive.ensure_chat(grace, "Grace").unwrap();
         archive
-            .insert_message(&entry(ada, "zapfast-call-a", true, 100), None)
+            .insert_message(&entry(ada, "wavo-call-a", true, 100), None)
             .unwrap();
         archive
-            .insert_message(&entry(grace, "zapfast-call-b", false, 300), None)
+            .insert_message(&entry(grace, "wavo-call-b", false, 300), None)
             .unwrap();
         let mut text = entry(ada, "TEXT", false, 200);
         text.content = Content::Text {
@@ -157,7 +157,7 @@ mod tests {
         archive.insert_message(&text, None).unwrap();
         let log = archive.call_log(CALL_LOG_LIMIT).unwrap();
         let ids: Vec<&str> = log.iter().map(|entry| entry.id.as_str()).collect();
-        assert_eq!(ids, ["zapfast-call-b", "zapfast-call-a"]);
+        assert_eq!(ids, ["wavo-call-b", "wavo-call-a"]);
         assert_eq!(log[0].chat, grace);
     }
 
@@ -194,7 +194,7 @@ mod tests {
         let chat = "15550001111@s.whatsapp.net";
         archive.ensure_chat(chat, "Ada").unwrap();
         archive
-            .insert_message(&entry(chat, "zapfast-call-1", false, 100), None)
+            .insert_message(&entry(chat, "wavo-call-1", false, 100), None)
             .unwrap();
         archive
             .insert_message(&entry(chat, "PHONE-CALL-LOG", false, 200), None)

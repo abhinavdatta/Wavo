@@ -1,0 +1,164 @@
+<!--
+  WAVO as a per-user Windows Installer package (WiX Toolset 5).
+
+  - Installs wavo.exe to %LOCALAPPDATA%\Programs\WAVO, per user, so no
+    UAC prompt. A Start menu shortcut opens it; a desktop shortcut is kept
+    when one exists, as the Inno Setup installer offered it.
+  - wavo-installer.txt tells WAVO's updater that this copy came from an
+    installer, so an update downloads and runs the next package with
+    INSTALLFOLDER set to the folder WAVO runs from.
+  - Takes over a copy installed by the Inno Setup installer: it installs into
+    that folder, then removes Inno's uninstaller and its Settings > Apps
+    entry. Chats, settings and the login live elsewhere and stay.
+  - Refuses to install or uninstall while WAVO runs, so it never leaves
+    half a program behind.
+
+  Build (see packaging/windows/msi.rb):
+    wix build wavo.wxs -arch x64 -ext WixToolset.Util.wixext -d Version=1.2.3
+      -d SourceDir=... -pdbtype none -o wavo.msi
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+  xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Package
+    Name="WAVO"
+    Manufacturer="Carmine Paolino"
+    Version="$(Version)"
+    UpgradeCode="{AC7FEAEC-54FA-4A71-95A5-532EE484B6A9}"
+    Scope="perUser"
+    Compressed="yes"
+    Language="1033">
+    <!-- Never change the UpgradeCode: it ties every version together. -->
+    <SummaryInformation Description="WAVO" Manufacturer="Carmine Paolino" />
+    <MajorUpgrade
+      Schedule="afterInstallInitialize"
+      AllowSameVersionUpgrades="yes"
+      DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="WAVOIcon" SourceFile="$(sys.SOURCEFILEDIR)wavo.ico" />
+    <Property Id="ARPPRODUCTICON" Value="WAVOIcon" />
+    <Property Id="ARPURLINFOABOUT" Value="https://wavo.rocks" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/crmne/wavo/issues" />
+    <Property Id="ARPURLUPDATEINFO" Value="https://github.com/crmne/wavo/releases" />
+    <Property Id="ARPCOMMENTS" Value="© 2026 Carmine Paolino. MIT License. Not affiliated with WhatsApp or Meta." />
+    <Property Id="ARPNOMODIFY" Value="1" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+    <!--
+      Replace every file, whatever its version and dates. Windows Installer
+      keeps a file it judges newer or modified, as an Inno Setup install can
+      leave them: without this, taking over that install could keep the old
+      program.
+    -->
+    <Property Id="REINSTALLMODE" Value="amus" />
+
+    <!-- An earlier MSI install, wherever it went. -->
+    <Property Id="ZAPFASTFOLDER">
+      <RegistrySearch Id="PreviousFolder" Root="HKCU" Key="Software\WAVO"
+        Name="InstallFolder" Type="directory" />
+    </Property>
+    <!-- A copy installed by the Inno Setup installer (its AppId). -->
+    <Property Id="INNOFOLDER">
+      <RegistrySearch Id="InnoAppPath" Root="HKCU"
+        Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\{F2512314-384A-4002-9933-AB840FD01639}_is1"
+        Name="Inno Setup: App Path" Type="directory" />
+    </Property>
+    <!-- The desktop shortcut that installer may have made. -->
+    <Property Id="DESKTOPSHORTCUT">
+      <DirectorySearch Id="Desktop" Path="[DesktopFolder]" Depth="0">
+        <FileSearch Id="DesktopShortcut" Name="WAVO.lnk" />
+      </DirectorySearch>
+    </Property>
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="WAVO" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+    <StandardDirectory Id="DesktopFolder" />
+    <!-- Into the copy being replaced; the updater passes INSTALLFOLDER too. -->
+    <SetDirectory Id="INSTALLFOLDER" Action="InstallIntoEarlierMsiFolder" Value="[ZAPFASTFOLDER]" Sequence="both"
+      Condition="ZAPFASTFOLDER AND NOT INNOFOLDER" />
+    <SetDirectory Id="INSTALLFOLDER" Action="InstallIntoInnoFolder" Value="[INNOFOLDER]" Sequence="both"
+      Condition="INNOFOLDER" />
+
+    <!-- Per-user components use an HKCU value as their key path. -->
+    <ComponentGroup Id="Program" Directory="INSTALLFOLDER">
+      <Component Id="Program" Guid="{9068E83C-D2FA-4BF5-BD2B-996F56B1677C}">
+        <File Id="WAVOExe" Name="wavo.exe" Source="$(SourceDir)\wavo.exe" KeyPath="no" />
+        <!-- The updater's sign that this copy came from an installer. -->
+        <File Id="InstallerMarker" Name="wavo-installer.txt"
+          Source="$(SourceDir)\wavo-installer.txt" KeyPath="no" />
+        <RegistryValue Root="HKCU" Key="Software\WAVO"
+          Name="InstallFolder" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+        <RemoveFolder Id="RemoveInstallFolder" On="uninstall" />
+      </Component>
+      <Component Id="Documents" Guid="{728DB1BA-A36D-4FDB-AEF6-A172F22FEECB}">
+        <File Id="Readme" Name="README.md" Source="$(SourceDir)\README.md" KeyPath="no" />
+        <File Id="License" Name="LICENSE" Source="$(SourceDir)\LICENSE" KeyPath="no" />
+        <File Id="Notices" Name="THIRD-PARTY-NOTICES.md" Source="$(SourceDir)\THIRD-PARTY-NOTICES.md" KeyPath="no" />
+        <RegistryValue Root="HKCU" Key="Software\WAVO"
+          Name="Documents" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+      <!--
+        Taking over an Inno Setup install: its uninstaller and Settings > Apps
+        entry go, and never run, because they would delete these files. The
+        fastsapp.exe copy Inno kept for updaters up to 0.16.5 goes too: those
+        updaters only run the setup program, and WAVO deletes the copy itself.
+      -->
+      <Component Id="InnoTakeover" Guid="{3C068BE2-C306-4ECD-BE60-510E137D8AB2}" Condition="INNOFOLDER">
+        <RemoveFile Id="InnoUninstaller" Name="unins000.*" On="install" />
+        <RemoveFile Id="LegacyExe" Name="fastsapp.exe" On="install" />
+        <RemoveRegistryKey Root="HKCU" Action="removeOnInstall"
+          Key="Software\Microsoft\Windows\CurrentVersion\Uninstall\{F2512314-384A-4002-9933-AB840FD01639}_is1" />
+        <RegistryValue Root="HKCU" Key="Software\WAVO"
+          Name="TookOverInno" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="Shortcuts">
+      <Component Id="StartMenuShortcut" Guid="{077A8562-A258-4D3E-9952-2C20FA0ED066}" Directory="ProgramMenuFolder">
+        <Shortcut Id="WAVOShortcut" Name="WAVO"
+          Description="WhatsApp, native and fast"
+          Target="[#WAVOExe]" WorkingDirectory="INSTALLFOLDER">
+          <!-- Ties notifications and the taskbar to this shortcut. -->
+          <ShortcutProperty Key="System.AppUserModel.ID" Value="me.paolino.wavo" />
+        </Shortcut>
+        <!-- The shortcuts from before the rename. -->
+        <RemoveFile Id="LegacyStartMenuShortcut" Name="FastsApp.lnk" On="install" />
+        <RegistryValue Root="HKCU" Key="Software\WAVO"
+          Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+      <Component Id="DesktopShortcut" Guid="{2035F90C-2AC1-4A8B-8978-49E37F53C499}" Directory="DesktopFolder" Condition="DESKTOPSHORTCUT">
+        <Shortcut Id="DesktopWAVOShortcut" Name="WAVO"
+          Target="[#WAVOExe]" WorkingDirectory="INSTALLFOLDER">
+          <ShortcutProperty Key="System.AppUserModel.ID" Value="me.paolino.wavo" />
+        </Shortcut>
+        <RemoveFile Id="LegacyDesktopShortcut" Name="FastsApp.lnk" On="install" />
+        <RegistryValue Root="HKCU" Key="Software\WAVO"
+          Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <Feature Id="Main" Title="WAVO" AllowAbsent="no">
+      <ComponentGroupRef Id="Program" />
+      <ComponentGroupRef Id="Shortcuts" />
+    </Feature>
+
+    <!--
+      Refuse to go on while WAVO runs, before anything is removed. Only
+      detected, never closed: a portable copy has the same name. The updater's
+      own process is a separate helper and has quit WAVO first.
+    -->
+    <util:CloseApplication Id="WAVORunning" Target="wavo.exe"
+      Property="ZAPFASTRUNNING" RebootPrompt="no" />
+    <util:CloseApplication Id="LegacyRunning" Target="fastsapp.exe"
+      Property="ZAPFASTRUNNING" RebootPrompt="no" />
+    <CustomAction Id="RefuseWhileRunning"
+      Error="WAVO is running. Quit WAVO, then try again." />
+    <InstallExecuteSequence>
+      <Custom Action="RefuseWhileRunning" After="Wix4CloseApplications_$(sys.BUILDARCHSHORT)"
+        Condition="ZAPFASTRUNNING" />
+    </InstallExecuteSequence>
+  </Package>
+</Wix>

@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
 
-PackageIdentifier: crmne.ZapFast
+PackageIdentifier: crmne.WAVO
 PackageVersion: @VERSION@
 InstallerType: wix
 Scope: user
@@ -8,15 +8,15 @@ MinimumOSVersion: 10.0.0.0
 UpgradeBehavior: install
 ReleaseDate: @RELEASE_DATE@
 InstallationMetadata:
-  DefaultInstallLocation: '%LocalAppData%\Programs\ZapFast'
+  DefaultInstallLocation: '%LocalAppData%\Programs\WAVO'
 AppsAndFeaturesEntries:
 - UpgradeCode: '{AC7FEAEC-54FA-4A71-95A5-532EE484B6A9}'
 Installers:
 - Architecture: x64
-  InstallerUrl: https://github.com/crmne/zapfast/releases/download/v@VERSION@/zapfast-v@VERSION@-x86_64-pc-windows-msvc.msi
+  InstallerUrl: https://github.com/crmne/wavo/releases/download/v@VERSION@/wavo-v@VERSION@-x86_64-pc-windows-msvc.msi
   InstallerSha256: @X64_SHA256@
 - Architecture: arm64
-  InstallerUrl: https://github.com/crmne/zapfast/releases/download/v@VERSION@/zapfast-v@VERSION@-aarch64-pc-windows-msvc.msi
+  InstallerUrl: https://github.com/crmne/wavo/releases/download/v@VERSION@/wavo-v@VERSION@-aarch64-pc-windows-msvc.msi
   InstallerSha256: @ARM64_SHA256@
 ManifestType: installer
 ManifestVersion: 1.12.0

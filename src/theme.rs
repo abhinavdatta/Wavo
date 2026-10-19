@@ -15,19 +15,88 @@ pub type Catalog = fastframe_theme::Catalog<Palette>;
 /// What a normal launch adds to the catalogue. Demos and tests leave it out
 /// and stay isolated from the desktop and its files.
 pub const DESKTOP_THEMES: fastframe_theme::DesktopThemes = fastframe_theme::DesktopThemes {
-    slug: "zapfast",
-    omarchy_template: include_str!("../contrib/omarchy/zapfast.json.tpl"),
-    // Every template ZapFast shipped before, so an untouched copy installed
-    // by an older release is replaced with the current one.
-    omarchy_previous_templates: &[include_str!(
-        "../contrib/omarchy/previous/zapfast-1.json.tpl"
-    )],
+    slug: "wavo",
+    omarchy_template: include_str!("../contrib/omarchy/wavo.json.tpl"),
+    // WAVO starts fresh; the wavo-named templates belong to the app this
+    // fork came from, which upgrades its own installed copies.
+    omarchy_previous_templates: &[],
     presets: true,
 };
 
-/// The shared palettes, as ZapFast reads them.
+/// The shared palettes, as WAVO reads them.
 pub fn presets() -> impl Iterator<Item = CustomTheme> {
     fastframe_theme::presets::themes::<Palette>()
+}
+
+/// WAVO's own palettes, offered like the shared ones: installed into the
+/// themes folder as files the user owns. A file already there (edited or
+/// deleted by the user) is never overwritten, so the defaults can be
+/// changed or removed like any other palette.
+pub const DEFAULT_THEMES: &[(&str, &str)] = &[
+    (
+        "cloud day.json",
+        include_str!("../assets/themes/cloud day.json"),
+    ),
+    (
+        "cyber mint.json",
+        include_str!("../assets/themes/cyber mint.json"),
+    ),
+    ("ember.json", include_str!("../assets/themes/ember.json")),
+    (
+        "forest moss.json",
+        include_str!("../assets/themes/forest moss.json"),
+    ),
+    (
+        "lavender haze.json",
+        include_str!("../assets/themes/lavender haze.json"),
+    ),
+    (
+        "nord frost.json",
+        include_str!("../assets/themes/nord frost.json"),
+    ),
+    (
+        "ocean mist.json",
+        include_str!("../assets/themes/ocean mist.json"),
+    ),
+    (
+        "peach sunset.json",
+        include_str!("../assets/themes/peach sunset.json"),
+    ),
+    (
+        "sakura dusk.json",
+        include_str!("../assets/themes/sakura dusk.json"),
+    ),
+    (
+        "warm sand.json",
+        include_str!("../assets/themes/warm sand.json"),
+    ),
+];
+
+/// Writes [`DEFAULT_THEMES`] missing from `directory` (created when
+/// needed). Runs before a scan, so the first one already lists them.
+pub fn install_default_themes(directory: &std::path::Path) {
+    if let Err(error) = std::fs::create_dir_all(directory) {
+        log::warn!(
+            "unable to create the themes folder at {}: {error}",
+            directory.display()
+        );
+        return;
+    }
+    for (filename, contents) in DEFAULT_THEMES {
+        let path = directory.join(filename);
+        if path.exists() {
+            continue;
+        }
+        // A temporary file beside the target keeps a half-written palette
+        // out of a scan that runs while this works.
+        let temporary = directory.join(format!(".{filename}.tmp"));
+        if let Err(error) =
+            std::fs::write(&temporary, contents).and_then(|()| std::fs::rename(&temporary, &path))
+        {
+            log::warn!("unable to install the default palette {filename}: {error}");
+            let _ = std::fs::remove_file(&temporary);
+        }
+    }
 }
 
 /// What the theme setting says under it while the catalogue loads or when
@@ -52,7 +121,7 @@ pub fn theme_status(status: fastframe_theme::Status) -> &'static str {
             "The Omarchy palette could not be loaded. Keeping the last usable appearance. See the log for details."
         }
         Status::Problem(Problem::LoaderFailed | _) => {
-            "Custom themes could not be loaded. Run zapfast reload-themes to try again."
+            "Custom themes could not be loaded. Run wavo reload-themes to try again."
         }
     }
 }
@@ -506,7 +575,7 @@ impl fastframe_theme::Palette for Palette {
     }
 
     /// Spotifast palettes share the sixteen interface colours. Derive the
-    /// chat-only colours when importing one, while keeping explicit ZapFast
+    /// chat-only colours when importing one, while keeping explicit WAVO
     /// overrides.
     fn derive(&mut self, given: &std::collections::BTreeSet<&str>) {
         if given.contains("window") && !given.contains("chat") {
@@ -651,7 +720,7 @@ pub fn tabular(weight: fastframe_fonts::Weight, size: f32) -> egui::FontId {
 }
 
 fn tabular_family(weight: fastframe_fonts::Weight) -> egui::FontFamily {
-    egui::FontFamily::Name(format!("zapfast-tabular-{}", weight.name()).into())
+    egui::FontFamily::Name(format!("wavo-tabular-{}", weight.name()).into())
 }
 
 /// Installs fonts, icons, and base style.
@@ -812,7 +881,7 @@ fn install_fonts(ctx: &egui::Context) {
 fn add_tabular(fonts: &mut egui::FontDefinitions) {
     use fastframe_fonts::Weight;
     for weight in Weight::ALL {
-        let name = format!("zapfast-tabular-{}", weight.name());
+        let name = format!("wavo-tabular-{}", weight.name());
         let mut data = egui::FontData::from_static(fastframe_fonts::INTER);
         data.tweak.coords = egui::epaint::text::VariationCoords::new([(b"wght", weight.value())]);
         fonts
@@ -882,9 +951,9 @@ pub fn apply_text_rendering_change(ctx: &egui::Context) -> bool {
 
 fastframe_icons::icons! {
     /// Every icon the interface draws. Icons Spotifast ships too come from
-    /// fastframe-icons (`lucide`); the rest are ZapFast's own files.
+    /// fastframe-icons (`lucide`); the rest are WAVO's own files.
     pub enum Icon {
-        prefix: "zapfast-icon-",
+        prefix: "wavo-icon-",
         directory: "../assets/icons/",
         Archive => "archive",
         ArrowDown => "arrow-down",
@@ -902,6 +971,7 @@ fastframe_icons::icons! {
         ListChecks => "list-checks",
         CircleAlert => lucide "circle-alert",
         CircleCheck => lucide "circle-check",
+        CircleDashed => "circle-dashed",
         CircleX => lucide "circle-x",
         Clock => lucide "clock",
         Contact => "contact",
@@ -970,6 +1040,7 @@ fastframe_icons::icons! {
         Trash => lucide "trash-2",
         User => lucide "user",
         Users => lucide "users",
+        Megaphone => "megaphone",
         Video => "video",
         VideoOff => "video-off",
         Volume2 => lucide "volume-2",
@@ -1065,18 +1136,18 @@ pub fn circle_button(
 }
 
 /// Draws the app's mark as it ships: the lit disc and the ink bubble of
-/// `packaging/icons/zapfast.svg`, rendered once per pixel size.
+/// `packaging/icons/wavo.svg`, rendered once per pixel size.
 pub fn mark(ui: &egui::Ui, center: egui::Pos2, diameter: f32) {
     let ctx = ui.ctx();
     let pixels = (diameter * ctx.pixels_per_point()).round().max(1.0) as usize;
-    let id = egui::Id::new(("zapfast-mark", pixels));
+    let id = egui::Id::new(("wavo-mark", pixels));
     let texture = match ctx.data_mut(|data| data.get_temp::<egui::TextureHandle>(id)) {
         Some(texture) => texture,
         None => {
             let rgba = crate::util::app_icon_rgba(pixels);
             let image = egui::ColorImage::from_rgba_unmultiplied([pixels, pixels], &rgba);
             let texture = ctx.load_texture(
-                format!("zapfast-mark-{pixels}"),
+                format!("wavo-mark-{pixels}"),
                 image,
                 egui::TextureOptions::LINEAR,
             );
@@ -1093,7 +1164,7 @@ pub fn mark(ui: &egui::Ui, center: egui::Pos2, diameter: f32) {
 /// faint watermark.
 pub fn logo(ui: &egui::Ui, center: egui::Pos2, diameter: f32, disc: Color32, glyph: Color32) {
     ui.painter().circle_filled(center, diameter / 2.0, disc);
-    // Match `packaging/icons/zapfast-small.svg`: the bubble sits a little
+    // Match `packaging/icons/wavo-small.svg`: the bubble sits a little
     // right of and above the centre, where its tail balances it.
     let icon_size = diameter * 0.674;
     let icon_rect = egui::Rect::from_center_size(
@@ -1450,7 +1521,7 @@ pub fn preview_macos(ctx: &egui::Context) {
 
 /// Horizontal clearance for the window's buttons at the left of its top
 /// edge: the traffic lights on macOS, which do not scale with UI zoom, or the
-/// caption buttons ZapFast draws where the desktop puts them on the left.
+/// caption buttons WAVO draws where the desktop puts them on the left.
 pub fn traffic_light_inset(ctx: &egui::Context) -> f32 {
     if cfg!(target_os = "macos") {
         fastframe_titlebar::footprint(ctx, TOP_BAR_HEIGHT).left
@@ -1463,7 +1534,7 @@ pub fn traffic_light_inset(ctx: &egui::Context) -> f32 {
     }
 }
 
-/// Whether ZapFast draws the window's title bar itself: on Windows and
+/// Whether WAVO draws the window's title bar itself: on Windows and
 /// Linux when Settings > Appearance > Custom title bar is on
 /// (fastframe-titlebar), or in a layout test's preview of it.
 pub fn drawn_titlebar(ctx: &egui::Context) -> bool {
@@ -1479,13 +1550,13 @@ pub fn drawn_titlebar(ctx: &egui::Context) -> bool {
 }
 
 /// Whether the headers run to the window's top edge and share it with the
-/// window's buttons: macOS's hidden title bar, or the one ZapFast draws.
+/// window's buttons: macOS's hidden title bar, or the one WAVO draws.
 /// Status banners then go under the open chat's header, not across the top.
 pub fn chrome_in_headers(ctx: &egui::Context) -> bool {
     macos_chrome(ctx) || drawn_titlebar(ctx)
 }
 
-/// The room the caption buttons ZapFast draws take at each end of the top
+/// The room the caption buttons WAVO draws take at each end of the top
 /// edge, beside a header [`TOP_BAR_HEIGHT`] tall. Zero on macOS (the traffic
 /// lights are [`traffic_light_inset`]), under the desktop's own title bar,
 /// and in full screen.
@@ -1544,7 +1615,7 @@ mod tests {
         add_tabular(&mut fonts);
         for weight in Weight::ALL {
             let family = &fonts.families[&tabular_family(weight)];
-            assert_eq!(family[0], format!("zapfast-tabular-{}", weight.name()));
+            assert_eq!(family[0], format!("wavo-tabular-{}", weight.name()));
             assert_eq!(family[1..], fonts.families[&weight.family()][..]);
         }
         let ctx = egui::Context::default();
@@ -1871,7 +1942,7 @@ mod tests {
         assert!(ratio >= 4.5, "hover contrast is only {ratio:.2}:1");
     }
 
-    /// Every colour ZapFast has can be set by name, including the chat
+    /// Every colour WAVO has can be set by name, including the chat
     /// colours Spotifast's palettes lack; explicit ones win over derived ones.
     #[test]
     fn palette_files_set_every_colour_and_keep_explicit_chat_colours() {
@@ -1920,11 +1991,11 @@ mod tests {
         );
     }
 
-    /// ZapFast's Omarchy template adds the chat colours to the base ones and
+    /// WAVO's Omarchy template adds the chat colours to the base ones and
     /// renders as Omarchy's own renderer does.
     #[test]
     fn the_omarchy_template_renders_like_omarchy_in_light_and_dark_themes() {
-        const TEMPLATE: &str = include_str!("../contrib/omarchy/zapfast.json.tpl");
+        const TEMPLATE: &str = include_str!("../contrib/omarchy/wavo.json.tpl");
         for (colors, expected) in [
             (
                 include_str!("../tests/fixtures/omarchy/catppuccin.tsv"),
@@ -1956,8 +2027,38 @@ mod tests {
     #[test]
     fn the_shipped_omarchy_hook_has_not_drifted() {
         assert_eq!(
-            include_str!("../contrib/omarchy/zapfast-theme").replace("\r\n", "\n"),
-            fastframe_theme::omarchy::hook_script("zapfast")
+            include_str!("../contrib/omarchy/wavo-theme").replace("\r\n", "\n"),
+            fastframe_theme::omarchy::hook_script("wavo")
+        );
+    }
+
+    /// Every default palette must parse as a real WAVO palette, and
+    /// installing them must leave the user's own file alone.
+    #[test]
+    fn default_themes_are_valid_palettes_installed_without_overwriting() {
+        for (filename, contents) in DEFAULT_THEMES {
+            let result: Result<Palette, String> = fastframe_theme::parse_palette(contents);
+            assert!(result.is_ok(), "{filename}: {:?}", result.err());
+            assert_eq!(
+                filename.strip_suffix(".json").unwrap(),
+                fastframe_theme::display_name(filename)
+            );
+        }
+        let directory = tempfile::tempdir().unwrap();
+        install_default_themes(directory.path());
+        for (filename, contents) in DEFAULT_THEMES {
+            assert_eq!(
+                std::fs::read(directory.path().join(filename)).unwrap(),
+                contents.as_bytes(),
+                "{filename}"
+            );
+        }
+        std::fs::write(directory.path().join("ember.json"), "mine").unwrap();
+        install_default_themes(directory.path());
+        assert_eq!(
+            std::fs::read_to_string(directory.path().join("ember.json")).unwrap(),
+            "mine",
+            "the user's palette is untouched"
         );
     }
 

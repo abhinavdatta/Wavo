@@ -6,26 +6,26 @@ nav_order: 0
 
 ## File locations
 
-ZapFast follows each platform's conventions. Each linked number has its own
+WAVO follows each platform's conventions. Each linked number has its own
 folder, `<id>` below, so files, caches, and keys never mix between numbers.
 On Linux:
 
 | What | Where | Notes |
 | --- | --- | --- |
-| Settings | `~/.config/zapfast/settings.json` | JSON, safe to edit; the app lock password and the locked-chats code are kept only as salted verifiers |
-| Account list | `~/.config/zapfast/accounts.json` | Which numbers are linked here and which one is showing |
-| Session keys | `~/.local/state/zapfast/accounts/<id>/session.db` | Deleting it unlinks that number |
-| Message archive | `~/.local/state/zapfast/accounts/<id>/archive.db` | Encrypted; the only copy of history WhatsApp will not send again |
-| Per-number settings | `~/.local/state/zapfast/accounts/<id>/settings.json` | Notifications, receipts, typing, automatic downloads, background history, the last open chat, the chat-list chip or label, and the wallpaper |
-| Stickers and packs | `~/.local/state/zapfast/accounts/<id>/stickers/` | Plain WebP files; each pack is a folder |
-| Wallpaper image | `~/.local/state/zapfast/accounts/<id>/wallpaper.jpg` | Copy of the chosen picture (or `.png`, `.webp`, `.gif`) |
-| Attachments, avatars | `~/.cache/zapfast/accounts/<id>/` | Safe to delete; available files download again when viewed |
-| Last run's log | `~/.local/state/zapfast/zapfast.log` | `--verbose` for more |
-| Crash log | `~/.local/state/zapfast/panic.log` | Safe to delete |
+| Settings | `~/.config/wavo/settings.json` | JSON, safe to edit; the app lock password and the locked-chats code are kept only as salted verifiers |
+| Account list | `~/.config/wavo/accounts.json` | Which numbers are linked here and which one is showing |
+| Session keys | `~/.local/state/wavo/accounts/<id>/session.db` | Deleting it unlinks that number |
+| Message archive | `~/.local/state/wavo/accounts/<id>/archive.db` | Encrypted; the only copy of history WhatsApp will not send again |
+| Per-number settings | `~/.local/state/wavo/accounts/<id>/settings.json` | Notifications, receipts, typing, automatic downloads, background history, the last open chat, the chat-list chip or label, and the wallpaper |
+| Stickers and packs | `~/.local/state/wavo/accounts/<id>/stickers/` | Plain WebP files; each pack is a folder |
+| Wallpaper image | `~/.local/state/wavo/accounts/<id>/wallpaper.jpg` | Copy of the chosen picture (or `.png`, `.webp`, `.gif`) |
+| Attachments, avatars | `~/.cache/wavo/accounts/<id>/` | Safe to delete; available files download again when viewed |
+| Last run's log | `~/.local/state/wavo/wavo.log` | `--verbose` for more |
+| Crash log | `~/.local/state/wavo/panic.log` | Safe to delete |
 
 Back up the archive if you need its history. WhatsApp sends only recent
-history to a new device, although ZapFast can request some older messages from
-the phone. Clearing the media cache makes ZapFast download attachments again.
+history to a new device, although WAVO can request some older messages from
+the phone. Clearing the media cache makes WAVO download attachments again.
 Expired attachments may still be available through the phone.
 **Settings > Files > Storage used** shows how much space the account on screen
 has in its media cache, split into images, videos and GIFs, stickers, and other
@@ -39,22 +39,22 @@ file already in the folder is never replaced, and the download becomes
 become `_`.
 
 On macOS, settings, state, and the logs are in
-`~/Library/Application Support/me.paolino.zapfast` and the caches in
-`~/Library/Caches/me.paolino.zapfast`. On Windows, settings are in
-`%APPDATA%\paolino\zapfast\config`, state and the logs in
-`%LOCALAPPDATA%\paolino\zapfast\data`, and the caches in
-`%LOCALAPPDATA%\paolino\zapfast\cache`.
+`~/Library/Application Support/wavo` and the caches in
+`~/Library/Caches/wavo`. On Windows, settings are in
+`%APPDATA%\wavo\config`, state and the logs in
+`%LOCALAPPDATA%\wavo\data`, and the caches in
+`%LOCALAPPDATA%\wavo\cache`.
 
-On first start, ZapFast moves the corresponding `fastsapp` directories (or
+On first start, WAVO moves the corresponding `fastsapp` directories (or
 `fastwhatsapp` from earlier versions), including the session, archive, saved
-stickers, and window state. Existing ZapFast directories are never overwritten.
-Quit FastsApp first; launching ZapFast while it is running brings the existing
+stickers, and window state. Existing WAVO directories are never overwritten.
+Quit FastsApp first; launching WAVO while it is running brings the existing
 window forward. A single-number setup from before 0.19 moves into
 `accounts/1/` on first start, keyring key included; if that cannot finish (a
-locked keyring, or a folder already in the way), ZapFast stops without moving
+locked keyring, or a folder already in the way), WAVO stops without moving
 anything and says why in its log.
 
-On Linux and macOS, ZapFast restricts its configuration, state, and cache
+On Linux and macOS, WAVO restricts its configuration, state, and cache
 directories to your user (`0700`) and stops at startup if it cannot. Windows
 uses the permissions inherited from your user profile.
 
@@ -67,7 +67,7 @@ Credential Manager. Back up both the archive and its keyring entry: copying
 only `archive.db` to another computer is not enough.
 
 If the keyring is locked or unavailable, unlock it and click **Retry**;
-ZapFast keeps the archive intact and waits before connecting. It never saves
+WAVO keeps the archive intact and waits before connecting. It never saves
 a replacement plaintext archive.
 
 A missing key is different from a locked keyring. Restore the original
@@ -76,7 +76,7 @@ creating new credentials will not help: neither can decrypt the existing
 archive. If the key cannot come back, **Start over…** renames the unreadable
 archive to `archive-unreadable-<date>.db`, forgets the linked session, and
 shows the linking screen; linking again brings recent history back from your
-phone. Remove the old ZapFast entry under **Linked devices** on the phone
+phone. Remove the old WAVO entry under **Linked devices** on the phone
 afterwards.
 
 Only the archive and its SQLite journal are encrypted. Session keys,
@@ -118,7 +118,7 @@ name or description, in the interface language or in English.
   Brazilian Portuguese, German, Spanish, Italian, French, Russian, Simplified
   Chinese, Traditional Chinese, Turkish, and Indonesian are available; otherwise English.
   Message contents, names, and logs are never translated.
-- **Custom title bar** (Windows and Linux, off by default): ZapFast draws
+- **Custom title bar** (Windows and Linux, off by default): WAVO draws
   its own title bar instead of the desktop's. The window buttons sit in the
   top corner of whichever pane is there (the open chat's header, the info
   panel, Settings, the Calls page, the call screen), on the left or the
@@ -138,11 +138,11 @@ name or description, in the interface language or in English.
   come into view. When off, click one to download it. Visible stickers still
   download automatically. Larger attachments download only when clicked.
 - **Fetch older history**: off by default, and set for
-  each number. When on, ZapFast asks the phone for older messages without you
+  each number. When on, WAVO asks the phone for older messages without you
   scrolling: the open chat first, then pinned chats and the ten most recently
   active ones (never channels). It sends at most one request every twenty
   seconds, and only while no other history request is waiting. Each chat is
-  asked for at most five pages each time ZapFast runs, and a chat the phone
+  asked for at most five pages each time WAVO runs, and a chat the phone
   does not answer goes to the back of the queue. Pages fetched this way go into
   the archive without moving the view. A chat the phone says has nothing older
   is not asked again.
@@ -160,14 +160,14 @@ name or description, in the interface language or in English.
 - **Desktop notifications**: for chats you are not looking at. Muted chats stay
   quiet.
 - **Show message content in notifications**: on by default. When off, every
-  notification says only "New message" from ZapFast, without the chat, the
+  notification says only "New message" from WAVO, without the chat, the
   sender, the text, or a picture, as behind the app lock, and plays only the
   message sound. Clicking one still opens the message. Applies to every
   account.
 - **Message sound** and **Mention sound**: Pidgin's sounds, the system sound,
   none, or an audio file. On macOS, Pidgin's sounds and the system sound play
   with the notification, so Do Not Disturb, Focus, and the notification
-  settings for ZapFast silence them; an audio file of your own plays
+  settings for WAVO silence them; an audio file of your own plays
   regardless.
 - **Play sounds for group messages**: when off, only mentions and replies to
   you make a sound in groups.
@@ -188,13 +188,13 @@ name or description, in the interface language or in English.
 - **Last seen**, **Online**, **Profile photo**, **About**, **Groups**, **Read
   receipts**, **Calls**: your WhatsApp account privacy, stored on WhatsApp's
   servers and shared with your phone. They can be changed while connected.
-- **App lock**: hide ZapFast behind a password. See [App lock](#app-lock).
+- **App lock**: hide WAVO behind a password. See [App lock](#app-lock).
 
 **System**
 
-- **Keep running when the window closes**: keep ZapFast linked in the tray.
+- **Keep running when the window closes**: keep WAVO linked in the tray.
 - **Start at login**: start in the tray without a window, where the platform
-  supports it. If the desktop's tray is not up yet, ZapFast waits up to 30
+  supports it. If the desktop's tray is not up yet, WAVO waits up to 30
   seconds for it, then opens the window, since a desktop without a tray could
   not bring it back. On macOS this is a login item under System Settings >
   General > Login Items, which macOS may ask you to allow there; inside a
@@ -202,7 +202,7 @@ name or description, in the interface language or in English.
 - **Check for updates**: ask GitHub once a day whether a newer release exists.
 - **Download updates automatically**: download and verify a new release in the
   background; restarting stays your choice. Package managers and Flatpak update
-  ZapFast themselves.
+  WAVO themselves.
 - **Proxy**: for the WhatsApp connection, media, profile pictures, GIF search,
   Signal sticker imports, and update checks. It accepts `socks5h://host:port`
   (the proxy resolves names, as Tor expects), `socks5://host:port`, and
@@ -229,7 +229,7 @@ playback speed, and the chat list and search pane widths.
 Development builds also remember the window's size, position, and maximized
 state in `settings.json`, including when reopening from the tray or a
 notification. The window opens at the same size whatever the interface's
-zoom. On Wayland the compositor controls placement, so ZapFast keeps the size
+zoom. On Wayland the compositor controls placement, so WAVO keeps the size
 without choosing the position. These window changes and **Keep chats
 archived** are not yet included in 0.19.0.
 
@@ -246,10 +246,10 @@ the one above: it stays on only if both were on.
 ## App lock
 
 Like WhatsApp Web's screen lock, **Settings > Privacy > App lock** hides
-ZapFast behind a password of at least six characters. ZapFast then starts
+WAVO behind a password of at least six characters. WAVO then starts
 locked and locks again after 1 minute, 15 minutes (the default), or 1 hour
 without input, a choice under **Lock after**; time hidden in the tray counts.
-**Lock ZapFast** in the tray menu and `Ctrl+Shift+L` lock it at once.
+**Lock WAVO** in the tray menu and `Ctrl+Shift+L` lock it at once.
 
 While locked, the window shows only the lock screen. Messages keep arriving
 but stay unread, and notifications say only "New message", without the chat,
@@ -269,16 +269,16 @@ opens the other.
 
 ## Updates
 
-With **Check for updates** on, ZapFast asks GitHub once a day for a newer
+With **Check for updates** on, WAVO asks GitHub once a day for a newer
 release. **Update** in the banner downloads and verifies it, and **Restart to
 update** installs it when convenient. Downloads are checked against the
 release's SHA-256 checksums, whose manifest must carry a valid Ed25519
 publisher signature; a missing or invalid signature stops the update. The
 updater keeps a backup and restores it if the new version cannot start.
 Release builds also carry GitHub provenance attestations
-(`gh attestation verify FILE -R crmne/zapfast`).
+(`gh attestation verify FILE -R crmne/wavo`).
 
-The in-app updater handles portable downloads (keep `zapfast-portable.txt`
+The in-app updater handles portable downloads (keep `wavo-portable.txt`
 beside the executable), the Windows installer, and the macOS app in
 Applications. AUR, DEB, RPM, Flatpak, Nix, Cargo, and Homebrew installations
 update through their package manager; an AppImage is replaced by downloading
@@ -286,6 +286,6 @@ the new one.
 
 ## The log
 
-Each run replaces `zapfast.log` and records warnings and errors, never
+Each run replaces `wavo.log` and records warnings and errors, never
 message contents, phone numbers, or keys. Include the end of this file when
 reporting an issue. **Settings > Files > Log > Open** shows it.

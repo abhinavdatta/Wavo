@@ -1,29 +1,29 @@
 ---
-title: What is ZapFast?
-description: Why ZapFast exists, what it supports, and its current limitations.
+title: What is WAVO?
+description: Why WAVO exists, what it supports, and its current limitations.
 redirect_from:
   - /what-is-fastsapp/
 nav_order: 0
 ---
 
-## Why ZapFast
+## Why WAVO
 
-WhatsApp has no official Linux app. ZapFast is a native WhatsApp client
+WhatsApp has no official Linux app. WAVO is a native WhatsApp client
 written in Rust with [egui](https://www.egui.rs) and
 [fastframe](https://fastframe.dev), the framework behind a family of native
 desktop apps. It connects through
-[whatsapp-rust](https://github.com/oxidezap/whatsapp-rust). ZapFast is a
+[whatsapp-rust](https://github.com/oxidezap/whatsapp-rust). WAVO is a
 single binary with no browser engine and uses a layout similar to WhatsApp Web.
 In our Linux test, it opens in under a second and uses about 200 MB of idle
 RAM, compared with 1.13 GB for WhatsApp Web and its Chromium processes.
 [See the measurements](/benchmarks/).
 
-<img class="VPImage dark" src="{{ '/screenshot.png' | relative_url }}" alt="ZapFast showing a conversation with an attachment, voice messages, reactions, a quoted reply, and a link preview" width="1800" height="1360">
-<img class="VPImage light" src="{{ '/screenshot-light.png' | relative_url }}" alt="ZapFast showing a conversation with an attachment, voice messages, reactions, a quoted reply, and a link preview" width="1800" height="1360">
+<img class="VPImage dark" src="{{ '/screenshot.png' | relative_url }}" alt="WAVO showing a conversation with an attachment, voice messages, reactions, a quoted reply, and a link preview" width="1800" height="1360">
+<img class="VPImage light" src="{{ '/screenshot-light.png' | relative_url }}" alt="WAVO showing a conversation with an attachment, voice messages, reactions, a quoted reply, and a link preview" width="1800" height="1360">
 
 ## What it does
 
-- **Stores your chats.** ZapFast links as a companion device and stores
+- **Stores your chats.** WAVO links as a companion device and stores
   messages in an encrypted SQLite file per account. History remains after
   restart, and older messages are fetched from your phone as you scroll.
 - **Sends common message types.** Send formatted text, replies, edits,
@@ -34,17 +34,17 @@ RAM, compared with 1.13 GB for WhatsApp Web and its Chromium processes.
   group calls and join call links, with mute, camera and a choice of
   microphone, speaker and camera, and see every call in its chat and on the
   Calls page.
-  [Calls](/using-zapfast/#calls).
+  [Calls](/using-wavo/#calls).
 - **Plays media in the chat.** Voice messages, videos, round video messages,
   GIFs, and animated stickers play in place. H.264 videos in MP4 files play
   after downloading to the local cache; other formats open in your system
-  player. [Download limits and playback controls](/using-zapfast/#videos-and-photos).
+  player. [Download limits and playback controls](/using-wavo/#videos-and-photos).
 - **Uses interactive messages.** Business templates show their text, images,
   and options. Reply buttons and simple lists send the selected response with
-  a quote, web links open in your browser, and copy-code buttons use the clipboard. [See examples and limitations](/using-zapfast/#interactive-messages).
+  a quote, web links open in your browser, and copy-code buttons use the clipboard. [See examples and limitations](/using-wavo/#interactive-messages).
 - **Uses consistent names.** Address-book names take priority over public
   WhatsApp profile names for chats, mentions, replies, and notifications.
-- **Runs in the background.** Closing the window keeps ZapFast in the system
+- **Runs in the background.** Closing the window keeps WAVO in the system
   tray. Notifications can show the chat picture and open the chat at the
   message they announced. Supported desktops show the unread count on the app
   icon in the taskbar or the macOS Dock; on Windows, the count appears while the window
@@ -61,8 +61,8 @@ RAM, compared with 1.13 GB for WhatsApp Web and its Chromium processes.
 
 These are current implementation limits, not permanent product exclusions.
 Feature requests can be discussed within the project's
-[product boundaries](https://github.com/crmne/zapfast/blob/main/CONTRIBUTING.md#before-opening-an-issue).
-ZapFast does not currently support:
+[product boundaries](https://github.com/crmne/wavo/blob/main/CONTRIBUTING.md#before-opening-an-issue).
+WAVO does not currently support:
 
 - Starting group calls, creating call links, joining a group's ongoing call
   from its chat, and screen sharing; status posts,
@@ -79,15 +79,15 @@ ZapFast does not currently support:
 In **0.19.0**, **Delete for me** for individual messages affects only the local
 copy. Syncing these deletions with the phone and other linked devices is now
 implemented on main, but has not yet been released. See
-[deletion behavior](/using-zapfast/#writing).
+[deletion behavior](/using-wavo/#writing).
 
-When reporting [an issue](https://github.com/crmne/zapfast/issues), include
+When reporting [an issue](https://github.com/crmne/wavo/issues), include
 what happened, what you expected, and when it happened. This helps match the
 problem to the log in the state directory.
 
 ## Account safety
 
-ZapFast is an **unofficial** client. Using it may be against WhatsApp's terms
+WAVO is an **unofficial** client. Using it may be against WhatsApp's terms
 of service. It uses WhatsApp's companion-device protocol, sends normal
 receipts, and does not automate or send messages in bulk. WhatsApp may still
 restrict accounts that use unofficial clients. Use an official client if you
@@ -95,13 +95,13 @@ cannot accept that risk.
 
 ## Prior art
 
-ZapFast connects through
+WAVO connects through
 [whatsapp-rust](https://github.com/oxidezap/whatsapp-rust), which grew out
 of the [whatsmeow](https://github.com/tulir/whatsmeow) lineage. WhatsApp
-Web defines the companion-device model. ZapFast is a sibling of
+Web defines the companion-device model. WAVO is a sibling of
 [Spotifast](https://spotifast.rocks), a native client for Spotify. Both are
 built on [fastframe](https://fastframe.dev), the shared foundation for native
 Rust apps built with [egui](https://www.egui.rs).
 
-ZapFast is an independent project, not affiliated with or endorsed by
+WAVO is an independent project, not affiliated with or endorsed by
 WhatsApp LLC or Meta. WhatsApp is a trademark of WhatsApp LLC.

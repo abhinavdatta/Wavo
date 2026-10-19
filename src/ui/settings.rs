@@ -1,4 +1,7 @@
 //! The settings page.
+//!
+//! This module provides the settings UI for the application, including
+//! account management, profile customization, and application preferences.
 
 use std::borrow::Cow;
 
@@ -217,7 +220,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
     }
     let palette = app.palette;
     let locale = app.locale;
-    // The caption buttons ZapFast draws, beside the column's title row when
+    // The caption buttons WAVO draws, beside the column's title row when
     // it reaches the top-right corner, or above it when the window is narrow.
     // Measured where the row stands unscrolled, so scrolling moves it away.
     let page = ui.max_rect();
@@ -305,7 +308,7 @@ const COLUMN_WIDTH: f32 = 640.0;
 const SIDE_MARGIN: f32 = 32.0;
 /// Space above and below the settings column.
 const TOP_MARGIN: f32 = 24.0;
-/// What the title row needs beside the caption buttons ZapFast draws: Back
+/// What the title row needs beside the caption buttons WAVO draws: Back
 /// and the title.
 const TITLE_MIN_CONTENT: f32 = 220.0;
 
@@ -415,13 +418,13 @@ fn sections(app: &App) -> Vec<Section> {
         },
     );
     appearance.row(translated(locale, "Language"), "", language_picker);
-    // macOS keeps its own traffic lights over ZapFast's headers.
+    // macOS keeps its own traffic lights over WAVO's headers.
     if cfg!(any(windows, target_os = "linux")) {
         appearance.row(
             translated(locale, "Custom title bar"),
             translated(
                 locale,
-                "Draw ZapFast's own title bar and window buttons instead of the desktop's.",
+                "Draw WAVO's own title bar and window buttons instead of the desktop's.",
             ),
             custom_titlebar_switch,
         );
@@ -597,7 +600,7 @@ fn sections(app: &App) -> Vec<Section> {
     let note = if app.account_privacy.fetch_failed {
         Some(crate::i18n::gettext(
             locale,
-            "Could not load your account privacy. Trying again when ZapFast reconnects.",
+            "Could not load your account privacy. Trying again when WAVO reconnects.",
         ))
     } else if !app.is_connected() {
         Some(crate::i18n::gettext(
@@ -685,7 +688,7 @@ fn sections(app: &App) -> Vec<Section> {
         translated(locale, "Check for updates"),
         translated(
             locale,
-            "Asks GitHub once a day, sending only the ZapFast version.",
+            "Asks GitHub once a day, sending only the WAVO version.",
         ),
         |settings| &mut settings.check_for_updates,
     );
@@ -693,7 +696,7 @@ fn sections(app: &App) -> Vec<Section> {
         translated(locale, "Download updates automatically"),
         translated(
             locale,
-            "You still choose when to restart. Package managers and Flatpak update ZapFast themselves.",
+            "You still choose when to restart. Package managers and Flatpak update WAVO themselves.",
         ),
         |settings| &mut settings.download_updates_automatically,
     );
@@ -762,7 +765,7 @@ fn sections(app: &App) -> Vec<Section> {
         },
     );
 
-    let mut account_section = Section::new(translated(locale, "Account"));
+    let mut account_section = Section::new(translated(locale, "Account → Change profile"));
     account_section.block(
         vec![
             translated(locale, "Your name"),
@@ -771,11 +774,42 @@ fn sections(app: &App) -> Vec<Section> {
                 source: "About".into(),
             },
             translated(locale, "Change profile picture"),
+            translated(locale, "Change profile"),
+            translated(locale, "Profile password"),
+            Text {
+                shown: "".into(),
+                source: "".into(),
+            },
             translated(locale, "Unlink this computer"),
             translated(locale, "Add account"),
             translated(locale, "Remove this account"),
         ],
         |ui, app| account(app, ui),
+    );
+
+    // The Profile section keeps only the picture picker: everything else it
+    // used to repeat (name and About, password, unlinking, account
+    // management) lives once, in the Account card above.
+
+    let mut change_profile = Section::new(translated(locale, "Profile"));
+    change_profile.block(
+        vec![translated(locale, "Change profile picture")],
+        move |ui, app| {
+            ui.horizontal(|ui| {
+                ui.set_width(ui.available_width());
+                if theme::soft_button(
+                    ui,
+                    &palette,
+                    Some(Icon::Image),
+                    &crate::i18n::gettext(app.locale, "Change profile picture"),
+                    true,
+                )
+                .clicked()
+                {
+                    app.actions.push(Action::PickProfilePicture);
+                }
+            });
+        },
     );
 
     let mut files = Section::new(translated(locale, "Files"));
@@ -869,7 +903,7 @@ fn sections(app: &App) -> Vec<Section> {
     let mut about_section = Section::new(translated(locale, "About"));
     about_section.block(
         vec![
-            "ZapFast".into(),
+            "WAVO".into(),
             translated(locale, "Keyboard shortcuts"),
             translated(locale, "Source code"),
         ],
@@ -883,12 +917,13 @@ fn sections(app: &App) -> Vec<Section> {
         privacy,
         system,
         account_section,
+        change_profile,
         files,
         about_section,
     ]
 }
 
-/// The app lock: a password, how long ZapFast may go unused, and the form
+/// The app lock: a password, how long WAVO may go unused, and the form
 /// that sets, changes, or removes the password.
 fn app_lock_rows(app: &App, privacy: &mut Section) {
     use crate::app_lock::FormMode;
@@ -934,7 +969,7 @@ fn app_lock_rows(app: &App, privacy: &mut Section) {
             translated(locale, "Lock after"),
             keyed(translated(
                 locale,
-                "Time without using ZapFast, also counted while it is in the tray. Ctrl+Shift+L locks it at once.",
+                "Time without using WAVO, also counted while it is in the tray. Ctrl+Shift+L locks it at once.",
             )),
             move |ui, app| {
                 let selected = app.settings.app_lock_after;
@@ -1150,7 +1185,7 @@ fn theme_picker(ui: &mut egui::Ui, app: &mut App) {
 }
 
 /// The website's page on writing a theme.
-const THEMES_GUIDE: &str = "https://zapfast.rocks/themes/";
+const THEMES_GUIDE: &str = "https://wavo.rocks/themes/";
 
 /// The interface language menu.
 fn font_picker(ui: &mut egui::Ui, app: &mut App) {
@@ -1678,6 +1713,18 @@ fn account(app: &mut App, ui: &mut egui::Ui) {
             }
         });
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            // Profile change button - allows editing the current profile
+            if theme::soft_button(
+                ui,
+                &palette,
+                Some(Icon::Pencil),
+                &crate::i18n::gettext(app.locale, "Change profile"),
+                false,
+            )
+            .clicked()
+            {
+                draft = Some((name.clone(), app.me_about.clone().unwrap_or_default()));
+            }
             // With other numbers here, unlinking this one also takes it off
             // the switcher; the last one stays, waiting to be linked again.
             if app.has_several_accounts() {
@@ -1705,6 +1752,8 @@ fn account(app: &mut App, ui: &mut egui::Ui) {
             {
                 app.actions.push(Action::ShowDialog(Dialog::ConfirmUnlink));
             }
+            // Account management lives once, here: repeating Add account in
+            // the Profile section made it read as a second copy.
             if theme::soft_button(
                 ui,
                 &palette,
@@ -1718,6 +1767,8 @@ fn account(app: &mut App, ui: &mut egui::Ui) {
             }
         });
     });
+    // This profile's opening password: asked on the profile wall at start.
+    profile_pin_rows(app, ui);
     if let Some((draft_name, draft_about)) = &draft {
         ui.add_space(10.0);
         let mut done = false;
@@ -1758,6 +1809,139 @@ fn account(app: &mut App, ui: &mut egui::Ui) {
     });
 }
 
+/// The opening password of the profile on screen: it is asked on the
+/// profile wall at app start, before this account's chats show.
+fn profile_pin_rows(app: &mut App, ui: &mut egui::Ui) {
+    use crate::app_lock::{FormError, FormMode, MIN_PASSWORD_CHARS};
+    use crate::i18n::gettext;
+    let palette = app.palette;
+    let locale = app.locale;
+    let pinned = app.account().settings.profile_pin_hash.is_some();
+    if app.profile_pin_form.is_some() {
+        // Found by the same words as the row above, so a search keeps them
+        // together.
+        theme::text(
+            ui,
+            gettext(
+                locale,
+                "The password this profile asks for when it is picked at start",
+            ),
+            theme::regular(12.5),
+            palette.secondary,
+        );
+        let Some((_, form)) = app.profile_pin_form.as_mut() else {
+            return;
+        };
+        let mode = form.mode;
+        let busy = form.busy;
+
+        ui.add_space(4.0);
+        let count = MIN_PASSWORD_CHARS.to_string();
+        let mut fields: Vec<(&mut String, String, &'static str)> = Vec::new();
+        if mode != FormMode::Set {
+            fields.push((
+                &mut form.current,
+                gettext(locale, "Current password").into_owned(),
+                "profile-pin-current",
+            ));
+        }
+        if mode != FormMode::TurnOff {
+            fields.push((
+                &mut form.new,
+                gettext(locale, "New password, at least {count} characters")
+                    .replace("{count}", &count),
+                "profile-pin-new",
+            ));
+            fields.push((
+                &mut form.confirm,
+                gettext(locale, "Type the new password again").into_owned(),
+                "profile-pin-confirm",
+            ));
+        }
+        let focus_first = ui.memory(|memory| memory.focused().is_none());
+        let mut submit = false;
+        for (index, (text, hint, id)) in fields.into_iter().enumerate() {
+            let id = egui::Id::new(id);
+            // TextEdit surrenders focus on Enter; take the key before drawing
+            // it, as the app lock's form does.
+            submit |= ui.memory(|memory| memory.has_focus(id))
+                && ui.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Enter));
+            let response = ui.add_enabled(
+                !busy,
+                egui::TextEdit::singleline(text)
+                    .id(id)
+                    .password(true)
+                    .hint_text(hint)
+                    .font(theme::regular(13.0))
+                    .desired_width(320.0_f32.min(ui.available_width())),
+            );
+            if index == 0 && focus_first && !busy {
+                response.request_focus();
+            }
+        }
+        if let Some(error) = form.error.map(|error| match error {
+            FormError::TooShort => {
+                gettext(locale, "The password needs at least {count} characters.")
+                    .replace("{count}", &count)
+            }
+            FormError::Mismatch => {
+                gettext(locale, "The two new passwords are different.").into_owned()
+            }
+            FormError::WrongCurrent => gettext(locale, "Wrong password. Try again.").into_owned(),
+        }) {
+            widgets::rich_text(ui, &error, theme::regular(12.5), palette.danger);
+        }
+        ui.horizontal(|ui| {
+            let confirm = match mode {
+                FormMode::Set => gettext(locale, "Protect profile"),
+                FormMode::Change => gettext(locale, "Change password"),
+                FormMode::TurnOff => gettext(locale, "Remove password"),
+            };
+            submit |= ui
+                .add_enabled_ui(!busy, |ui| theme::pill_button(ui, &palette, &confirm, true))
+                .inner
+                .clicked();
+            if submit {
+                app.actions.push(Action::SubmitProfilePinForm);
+            }
+            if busy {
+                theme::spinner(ui, 16.0, palette.accent);
+            } else if theme::pill_button(ui, &palette, &gettext(locale, "Cancel"), false).clicked()
+            {
+                app.actions.push(Action::ProfilePinForm(None));
+            }
+        });
+        ui.add_space(10.0); // END FORM
+        return;
+    }
+    ui.add_space(6.0);
+    ui.horizontal(|ui| {
+        ui.add_space(70.0);
+        let modes: Vec<(FormMode, String)> = if pinned {
+            vec![
+                (
+                    FormMode::TurnOff,
+                    gettext(locale, "Remove password").into_owned(),
+                ),
+                (
+                    FormMode::Change,
+                    gettext(locale, "Change password").into_owned(),
+                ),
+            ]
+        } else {
+            vec![(
+                FormMode::Set,
+                gettext(locale, "Protect with password").into_owned(),
+            )]
+        };
+        for (mode, label) in modes {
+            if theme::soft_button(ui, &palette, Some(Icon::Lock), &label, false).clicked() {
+                app.actions.push(Action::ProfilePinForm(Some(mode)));
+            }
+        }
+    });
+}
+
 /// A single-line profile text field with its caption above it. Returns
 /// whether Enter submitted it.
 fn profile_field(
@@ -1778,7 +1962,7 @@ fn profile_field(
     response.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter))
 }
 
-/// The version, links to more about ZapFast, and who made it.
+/// The version, links to more about WAVO, and who made it.
 fn about(app: &mut App, ui: &mut egui::Ui) {
     let palette = app.palette;
     ui.horizontal(|ui| {
@@ -1788,7 +1972,7 @@ fn about(app: &mut App, ui: &mut egui::Ui) {
         ui.vertical(|ui| {
             theme::text(
                 ui,
-                format!("ZapFast {}", env!("CARGO_PKG_VERSION")),
+                format!("WAVO {}", env!("CARGO_PKG_VERSION")),
                 theme::semibold(16.0),
                 palette.text,
             );
@@ -2151,13 +2335,13 @@ mod tests {
 
     #[test]
     fn blocks_are_found_by_their_keywords() {
-        let mut account = Section::new(translated(Locale::English, "Account"));
+        let mut account = Section::new(translated(Locale::English, "Account → Change profile"));
         account.block(
             vec![translated(Locale::English, "Unlink this computer")],
             |_, _| {},
         );
         assert_eq!(account.visible(&Filter::new("unlink")).1.len(), 1);
-        let mut account = Section::new(translated(Locale::English, "Account"));
+        let mut account = Section::new(translated(Locale::English, "Account → Change profile"));
         account.block(Vec::new(), |_, _| {});
         assert!(account.visible(&Filter::new("unlink")).1.is_empty());
     }

@@ -320,7 +320,7 @@ impl WallpaperColor {
     }
 }
 
-/// How long ZapFast may go without input before the app lock locks it:
+/// How long WAVO may go without input before the app lock locks it:
 /// WhatsApp Web's three choices.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -400,7 +400,7 @@ pub enum NotificationSound {
     System,
     /// No sound.
     None,
-    /// An audio file ZapFast plays itself.
+    /// An audio file WAVO plays itself.
     Custom(std::path::PathBuf),
 }
 
@@ -418,7 +418,7 @@ pub struct Settings {
     pub(crate) messages_theme: bool,
     /// The interface's typeface.
     pub font: FontChoice,
-    /// Windows and Linux: draw ZapFast's own title bar and window buttons
+    /// Windows and Linux: draw WAVO's own title bar and window buttons
     /// instead of the desktop's. Off by default: on some Intel graphics
     /// drivers a frameless window shows a black band at the top and its
     /// clicks land below where they are drawn (Spotifast #348, #554).
@@ -462,7 +462,7 @@ pub struct Settings {
     pub wallpaper_color: WallpaperColor,
     /// Colour selected for the dark wallpaper picker.
     pub dark_wallpaper_color: WallpaperColor,
-    /// ZapFast's own copy of the chosen wallpaper image, drawn in place of the
+    /// WAVO's own copy of the chosen wallpaper image, drawn in place of the
     /// colour and doodles in light and dark mode alike.
     pub wallpaper_image: Option<std::path::PathBuf>,
     /// Last open chat, restored at startup.
@@ -529,7 +529,7 @@ pub struct Settings {
     /// Salted, slow verifier of the app lock password
     /// ([`crate::app_lock::verifier`]); `None` leaves the app lock off.
     pub app_lock_hash: Option<String>,
-    /// How long ZapFast may go unused before the app lock locks it.
+    /// How long WAVO may go unused before the app lock locks it.
     pub app_lock_after: AutoLock,
     /// Last window width in logical pixels (points at zoom 1), remembered
     /// across restarts; see [`fastframe_shell::window::Geometry`]. `None`
@@ -831,6 +831,12 @@ pub struct AccountSettings {
     pub save_contacts_to_phone: bool,
     /// This account's copy of the chosen chat wallpaper image.
     pub wallpaper_image: Option<std::path::PathBuf>,
+    /// Salted PBKDF2 verifier of this profile's opening password, made by
+    /// [`crate::app_lock::verifier`]. `None` opens this profile without
+    /// asking. Each linked WhatsApp account is a profile; the password is
+    /// asked when it is picked on the profile wall at startup.
+    #[serde(default)]
+    pub profile_pin_hash: Option<String>,
     /// Whether this account's phone is asked for older history in the
     /// background. Off by default: it asks the phone for history nobody
     /// scrolled to, so an account that has never turned it on does not.
@@ -854,6 +860,7 @@ impl Default for AccountSettings {
             limit_notifications: NotificationLimit::Off,
             save_contacts_to_phone: true,
             wallpaper_image: None,
+            profile_pin_hash: None,
             history_prefetch: false,
             list_filter: None,
             call_filter: None,
@@ -872,6 +879,7 @@ impl AccountSettings {
             limit_notifications: NotificationLimit::Off,
             save_contacts_to_phone: settings.save_contacts_to_phone,
             wallpaper_image: settings.wallpaper_image.clone(),
+            profile_pin_hash: None,
             history_prefetch: false,
             list_filter: None,
             call_filter: None,
@@ -1192,7 +1200,7 @@ mod tests {
 
     #[test]
     fn round_trips_through_disk() {
-        let dir = std::env::temp_dir().join(format!("zapfast-settings-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("wavo-settings-{}", std::process::id()));
         let path = dir.join("settings.json");
         let settings = Settings {
             zoom: 1.25,

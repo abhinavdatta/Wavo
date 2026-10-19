@@ -172,13 +172,13 @@ pub(super) fn overlay(
         });
 }
 
-/// What a pane's header row needs beside the caption buttons ZapFast draws:
+/// What a pane's header row needs beside the caption buttons WAVO draws:
 /// its close button and title.
 const HEADER_MIN_CONTENT: f32 = 240.0;
 
 /// The top of a pane's header, inside its frame of `margin`: at the window's
 /// top-right corner it drags the window and keeps clear of the caption
-/// buttons ZapFast draws, moving the header's row under them when the pane
+/// buttons WAVO draws, moving the header's row under them when the pane
 /// is too narrow to share it. Call it before the row, which leaves the
 /// returned room at its left (a narrow window's page over the chat reaches
 /// both corners).

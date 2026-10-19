@@ -1,5 +1,5 @@
 ---
-title: Using ZapFast
+title: Using WAVO
 description: Send messages, open chats from links, and use attachments, interactive messages, voice messages, and keyboard shortcuts.
 redirect_from:
   - /using-fastsapp/
@@ -42,7 +42,7 @@ WhatsApp; a message labelled as forwarded many times goes to one chat at a
 time. With one chat selected, **Forward** sends it straight away. With
 several, **Review recipients** lists them for you to confirm, and **Back**
 returns to the picker without losing the selection. If a destination becomes
-locked or read-only, ZapFast returns to selection instead of sending a partial
+locked or read-only, WAVO returns to selection instead of sending a partial
 batch. Switching accounts discards the open forwarding selection.
 
 Right-click a group message and choose **Reply privately** to open a direct
@@ -126,7 +126,7 @@ Click **Chats** in the rail, or press Escape, to go back to the chats.
 
 **Development builds** can pin a message for everyone in the chat. Choose
 **Pin message** in a message's menu; WhatsApp keeps the pin for seven days. A
-chat holds three pins at a time, and ZapFast refuses a fourth instead of
+chat holds three pins at a time, and WAVO refuses a fourth instead of
 quietly replacing one. A line under the chat's header shows the newest pin,
 with a small bar at its left marking how many pins there are and which one is
 shown. Click the line to open that message; the line then moves on to the next
@@ -141,7 +141,7 @@ again later.
 
 The sticker tab works like WhatsApp's: a row of tabs holds **Recent**
 (the clock), **Favorites** (the star), each of your packs, and **+** for
-adding more. ZapFast adds **Received** (the speech bubble) after Favorites.
+adding more. WAVO adds **Received** (the speech bubble) after Favorites.
 Click a sticker to send it. Animated stickers play on hover.
 
 **Recent** holds the stickers you sent, not the ones you received.
@@ -168,7 +168,7 @@ express in their metadata, as WhatsApp's own stickers do.
 Under **+**, paste a `signal.art` link from
 [signalstickers.org](https://signalstickers.org) (or click **Find packs**), or
 open a `.wastickers` file, to import a pack. Signal packs keep each sticker's
-emoji. Open a pack's tab and use its delete button to remove it; ZapFast asks
+emoji. Open a pack's tab and use its delete button to remove it; WAVO asks
 first, since that deletes the pack's files. Packs are stored as WebP files on
 your computer.
 
@@ -217,7 +217,7 @@ them.
 
 Staged attachments stay with their chat, along with their caption and reply,
 when you switch chats or accounts, and come back when you return. Unlike text
-drafts, they are kept only while ZapFast runs. A refused attachment send goes
+drafts, they are kept only while WAVO runs. A refused attachment send goes
 back to the chat it was meant for.
 
 Click a picture above the composer to crop it before you send it. The picture
@@ -227,7 +227,7 @@ right** turn the picture a quarter at a time, and **Reset** puts it back the way
 it started. Press Enter or click the check to keep the crop, or Escape or the
 close button to leave the picture as it was.
 
-Keeping a crop does not change the file you picked. ZapFast writes the cropped
+Keeping a crop does not change the file you picked. WAVO writes the cropped
 picture beside its other media and sends that one, keeping any see-through
 parts of it. Opening the cropper again
 starts from your original with the crop you chose, so you can widen it back out
@@ -248,9 +248,9 @@ when that setting is off. Larger attachments never download on their own:
 click one, or choose **Download** in its right-click menu, and it downloads
 whatever its size. A download may take longer the larger the file is, at
 least two minutes plus one second for every 128 KiB, before it gives up and
-offers a retry. If an attachment has expired, ZapFast asks your phone to upload
+offers a retry. If an attachment has expired, WAVO asks your phone to upload
 it again. A live-location share shows the position this linked device received;
-WhatsApp sends later positions only to the phone. ZapFast marks when newer
+WhatsApp sends later positions only to the phone. WAVO marks when newer
 positions are available there, but cannot follow the moving location here.
 
 ## Locations
@@ -262,15 +262,15 @@ Coordinates may be separated by a comma or a space, and written with a dot or a
 comma as the decimal mark. The dialog shows the spot and a link to it before
 anything is sent, and refuses text it cannot read instead of guessing a place.
 
-ZapFast reads the text on this computer and fetches nothing: no map, no place
+WAVO reads the text on this computer and fetches nothing: no map, no place
 name, and no address. Links to other sites are not read, even when they carry
 coordinates. Short links such as `maps.app.goo.gl` only say where they lead when
 opened online, so the dialog asks for the full link or the coordinates instead;
 open the short link in your browser and copy the address it ends up at.
 
 What goes out is a location that stays where it was sent. A position that keeps
-moving is shared from the phone only, so a linked device such as ZapFast sends
-the spot. It has no place name or address, since ZapFast does not look one up.
+moving is shared from the phone only, so a linked device such as WAVO sends
+the spot. It has no place name or address, since WAVO does not look one up.
 If the location cannot be sent, the dialog comes back with the spot in it; if
 you have moved to another chat or opened something else since, the coordinates
 wait in that chat's message field instead.
@@ -289,7 +289,7 @@ include its option labels, and find these messages through search.
 - **Web links** have an external-link icon. Click one to open it in your browser,
   or focus it with the keyboard and press Enter.
 - **Reply buttons** send the selected response immediately, quoting the original
-  message. ZapFast includes the option identifier so the business can recognize
+  message. WAVO includes the option identifier so the business can recognize
   the choice. Legacy buttons, hydrated templates, and native-flow quick replies
   are supported.
 - **Simple lists** open a dialog with section headings and descriptions. Select an
@@ -328,8 +328,8 @@ Edited messages keep their current text, and downloaded images stay available.
 
 Embedded videos, documents, and templates containing only
 a reference to server-side text still need another client. A **More content in
-WhatsApp Web or on your phone** note marks content ZapFast cannot display.
-Interactive messages cannot yet be forwarded from ZapFast.
+WhatsApp Web or on your phone** note marks content WAVO cannot display.
+Interactive messages cannot yet be forwarded from WAVO.
 
 ### Lists, polls, and carousels
 
@@ -371,7 +371,7 @@ Click a video to download it to the local cache and play it in its message,
 with sound, a seek bar, a speed chip, and a mute switch; round video messages
 play inside their circle. Click the speed chip to cycle 1x, 1.5x, and 2x, as on
 voice messages: voices keep their pitch, stereo sound stays stereo, and the
-speed stays for the next video until ZapFast quits. Already downloaded videos
+speed stays for the next video until WAVO quits. Already downloaded videos
 play from their local file. Playback
 waits for the download to finish; videos over the
 [64 MiB automatic download limit](#attachments) download when you click them.
@@ -423,7 +423,7 @@ microphone. The light beside the time turns red, and the time starts, once the
 microphone delivers sound: one the system had put to sleep can take a moment to
 wake, and anything said before then is not recorded. Press Enter or the send
 button to send the recording, or Escape or
-the delete button to discard it. ZapFast raises the volume of quiet recordings.
+the delete button to discard it. WAVO raises the volume of quiet recordings.
 Starting a reply before recording includes the quoted message.
 
 ## Calls
@@ -463,7 +463,7 @@ your camera stays off.
 
 Your picture follows the connection. A call starts at a moderate quality and
 rises to 720p at 20 frames a second while the other side reports a clean
-connection; when it reports loss, or the connection cannot keep up, ZapFast
+connection; when it reports loss, or the connection cannot keep up, WAVO
 sends a smaller picture at a lower frame rate rather than one that freezes.
 
 Calls open the system's default microphone and speaker, and the first camera.
@@ -488,7 +488,7 @@ as they join and leave. Mute, the device pickers and hang up work as in
 any call, and hanging up leaves the call to the others. In a group's video
 call each member's camera fills their tile, and yours fills your own tile;
 someone whose camera is off keeps their photo. The camera
-button turns yours off and on. A group's voice call stays a voice call. ZapFast does not start group calls: WhatsApp refuses them
+button turns yours off and on. A group's voice call stays a voice call. WAVO does not start group calls: WhatsApp refuses them
 from linked devices, so a group's header has no call button, and a group call is
 started on the phone.
 
@@ -508,7 +508,7 @@ screen still rings, under that number's own names.
 Every call takes its place among the chat's messages, as on the phone: who
 called, voice or video, how long it lasted, or that it was missed, declined, or
 not answered. Calls made here are filed when they end, and so are the phone's:
-the ones it reports as they happen, the calls missed while ZapFast was closed,
+the ones it reports as they happen, the calls missed while WAVO was closed,
 and the call history it sends when the computer is linked. Right-click a call
 in a chat to call back from there.
 
@@ -520,7 +520,7 @@ went (a missed call's name is red), when, and how it went, and its phone or
 camera button calls back the same way. The search field finds calls by name or
 number. The chips under it show **All** calls or only the **Missed** ones (calls
 to you that nobody answered, group calls included); a search looks among the
-calls the chip shows, and ZapFast remembers the chip for each number. The chat
+calls the chip shows, and WAVO remembers the chip for each number. The chat
 you had open stays beside the list; clicking a row opens that
 person's chat there instead, at the call, with the voice and video buttons in
 its header. With no chat open, the pane beside the list offers **Start call**.
@@ -556,7 +556,7 @@ any caption; their files are not copied. Copying keeps the selection open.
 To message someone without saving their number, open **New chat**, choose
 **Add contact**, enter the number with its country code, leave the name blank,
 and choose **Message**. A leading `+`, spaces, hyphens and brackets are fine;
-anything else, such as an extension, is refused rather than dropped. ZapFast
+anything else, such as an extension, is refused rather than dropped. WAVO
 asks WhatsApp whether the number is registered before it opens the chat, and
 a failed check can be retried. Add a name instead to save the contact.
 
@@ -588,13 +588,13 @@ stays at the top of the transcript, and fades away a moment after you stop.
 
 A shared contact message shows the name from its vCard. When the card names a
 WhatsApp account, **Chat** opens a private conversation with it and, if the
-person is not already in ZapFast's contacts, **Add** saves them, adding them to
+person is not already in WAVO's contacts, **Add** saves them, adding them to
 your phone's contacts if you chose that for the last contact you added. A card with only a local number shows the number.
 
 The contact or group details, opened from the chat header or by right-clicking
 a chat in the list, show a chat's disappearing-messages timer, or **Off** once
 it has been turned off. Change the timer on your phone; messages you send from
-ZapFast follow it. Messages you receive stay in ZapFast's archive after they
+WAVO follow it. Messages you receive stay in WAVO's archive after they
 disappear on your other devices.
 
 The chips under the search bar narrow the list to **Unread**, **Private**
@@ -604,7 +604,7 @@ on the left above **Settings**, opens the archived chats in the list, and
 shows how many of them are unread. A chip with unread chats shows how many it
 has. Click the active chip again, or **All**, to see every chat. The
 filter applies only to this list: search and the archive still show everything.
-ZapFast remembers the chip or label each account last showed and comes back
+WAVO remembers the chip or label each account last showed and comes back
 to it at the next start.
 When the chips do not fit the chat list's width, the row fades at its edge:
 scroll it with the mouse wheel or a touchpad, or drag the scroll bar that
@@ -621,7 +621,7 @@ open chat, or unarchives it from **Archived**, as in WhatsApp.
 Archived chats stay archived when new messages arrive. **Development builds**
 add **Keep chats archived** in Settings: turn it off to have a new message,
 received or sent, bring the chat back to the list. This setting applies to all
-accounts here. ZapFast does not read the phone's own setting yet, so set it
+accounts here. WAVO does not read the phone's own setting yet, so set it
 here to match. Messages older than the archiving, duplicate deliveries, and
 history replay leave archived chats in place.
 
@@ -633,7 +633,7 @@ beside the chat. It shows the picture, the number or the members, and the
 chat's actions. When WhatsApp lets you edit a group's info, rename it with the
 pencil beside its name and click its photo to change it. Clicking a
 `chat.whatsapp.com` invite link shows the group and joins it without leaving
-ZapFast.
+WAVO.
 
 **Media, links and docs** in the panel lists the photos and videos, the
 documents, and the links shared in the chat, newest first: click a photo or a
@@ -654,15 +654,15 @@ description, use your phone.
 A phone number in a message is a link: clicking it offers to start a chat
 with that number or to copy the number as it is written.
 
-ZapFast registers the `whatsapp:` and `wa:` schemes, so a link that names a
+WAVO registers the `whatsapp:` and `wa:` schemes, so a link that names a
 chat opens that chat here. This works from a terminal, a script, or anything
 else that hands a link to the desktop.
 
 ```sh
 xdg-open 'whatsapp://send?phone=20123456789'
-zapfast 'https://wa.me/20123456789?text=Invoice%20%23123%20is%20attached'
-zapfast +20123456789
-zapfast 'https://chat.whatsapp.com/AbCdEf1234567890XyZ'
+wavo 'https://wa.me/20123456789?text=Invoice%20%23123%20is%20attached'
+wavo +20123456789
+wavo 'https://chat.whatsapp.com/AbCdEf1234567890XyZ'
 ```
 
 A number on its own, a `wa.me` or `api.whatsapp.com` link, and the
@@ -672,20 +672,20 @@ edit it or add to it before sending. The composer keeps whatever you were
 already typing, and a chat with unsent text of your own keeps it: a template
 never replaces a draft you wrote.
 
-A `chat.whatsapp.com` group invite link given to `zapfast` shows the same
+A `chat.whatsapp.com` group invite link given to `wavo` shows the same
 invite as clicking it in a message: the group is looked up, and you choose
 whether to join.
 
-When ZapFast is already running the link brings its window forward on that
+When WAVO is already running the link brings its window forward on that
 chat rather than starting a second copy, and when it is not it starts and
-opens the chat. A running copy of an older ZapFast that cannot open the link
+opens the chat. A running copy of an older WAVO that cannot open the link
 only brings its window forward, and the command says so: quit it and run the
 command again. While the app lock is up links wait for the unlock rather than
 opening anything the lock hides, and then open in the order they arrived.
 
 A `https://wa.me/...` link opened in a browser still opens WhatsApp Web: the
 desktop decides what a web link means, and a browser cannot be told to hand
-one link to another app. Use the `whatsapp:` form, or `zapfast`, for that.
+one link to another app. Use the `whatsapp:` form, or `wavo`, for that.
 
 An unreadable argument opens nothing and says so, rather than opening a chat
 it guessed at.
@@ -698,18 +698,18 @@ notification. The lock syncs with your phone and other linked devices.
 
 Choose **Locked** in the rail on the left, above **Settings**, and type your
 local code to open
-them; the first time, ZapFast offers to set one up. The code is separate from
+them; the first time, WAVO offers to set one up. The code is separate from
 your phone's and adds no encryption beyond the encrypted message archive.
 Leaving the tab, changing the code, or closing the window hides them again.
-Locked chats are read-only in ZapFast for now.
+Locked chats are read-only in WAVO for now.
 
 ## Labels
 
 Labels are yours alone. They stay on this computer, they never reach your phone,
-and nobody else sees them. They are not WhatsApp Business labels, and ZapFast
+and nobody else sees them. They are not WhatsApp Business labels, and WAVO
 does not read or change those. Open **Labels** in any chat's right-click menu
 and choose **Manage labels…** to make one, with a name and one of the offered
-colours. ZapFast keeps up to twenty.
+colours. WAVO keeps up to twenty.
 
 A chat can wear several labels at once. The **Labels** submenu of a chat's
 right-click menu lists them, with a checkmark beside the ones the chat wears;
@@ -738,25 +738,25 @@ Shift+Tab bring the focused button into view, too.
 
 ## Notifications and the tray
 
-Closing the window keeps ZapFast linked in the tray. On macOS, click the menu
-bar icon to open its menu, then choose **Show or hide ZapFast** to reopen the
+Closing the window keeps WAVO linked in the tray. On macOS, click the menu
+bar icon to open its menu, then choose **Show or hide WAVO** to reopen the
 window. On Linux and Windows, click the tray icon to reopen it. Launching the
 app again reopens the window on every platform. To quit, use **Quit** in the
-tray menu, or **Quit** in the Dock icon's menu on macOS, or on Linux **Quit ZapFast** in the
+tray menu, or **Quit** in the Dock icon's menu on macOS, or on Linux **Quit WAVO** in the
 launcher's right-click menu (KDE Plasma's task manager and application menu,
-GNOME's Dash). On every platform, `zapfast quit` in a terminal or a script quits
+GNOME's Dash). On every platform, `wavo quit` in a terminal or a script quits
 the running copy the same way, and does nothing when none runs. A copy from
 before this command is left running, and the command says so and fails.
 Launchers that support the Unity Launcher API
 show the unread count as a badge on the app icon: KDE Plasma's taskbar, with
 **Show badges** enabled in the Task Manager settings, and GNOME's Dash to Dock
-or Dash to Panel. Windows overlays a compact unread-message count on ZapFast's
+or Dash to Panel. Windows overlays a compact unread-message count on WAVO's
 taskbar button while the window is open, using `99+` above 99. Windows must use
 its regular taskbar icon size for overlays to appear. The count
 does not count toasts remaining in Windows notification history. On macOS, the
 Dock icon shows the number of unread chats in a red badge. The icon and
 badge stay with the app when its window is closed and reopened. A macOS
-source build run through Cargo uses ZapFast's icon too. Starting hidden
+source build run through Cargo uses WAVO's icon too. Starting hidden
 lets you open the first window from the menu-bar menu. On Linux and
 Windows, notifications show the chat picture. On Linux, Windows, and macOS, a
 click on a notification opens the chat at the message it announced. This holds for the 32 most recent tracked notifications on all three platforms;
@@ -764,7 +764,7 @@ older notifications remain in system history without a message click listener.
 Reading a chat removes its tracked notifications, including Windows toasts.
 Fastframe provides the same delivery and cancellation interface on each platform. macOS
 asks once for permission to show notifications. On Linux, a notification that arrives while the
-window is open behind others also highlights ZapFast in the taskbar until you
+window is open behind others also highlights WAVO in the taskbar until you
 switch to it. Muted chats do not send notifications, and
 archived chats stay quiet while they remain archived. You can change both settings.
 To keep messages off the screen, turn off **Show message content in
@@ -779,6 +779,6 @@ shortcuts.
 
 ## Screen readers
 
-ZapFast announces confirmations, errors, connection changes and history loading
+WAVO announces confirmations, errors, connection changes and history loading
 through the screen reader without moving focus. While the app is locked, only
 connection and history changes are announced.
